@@ -1,6 +1,7 @@
 project_name: terraform-demux
 builds:
-  - env:
+  - main: ./cmd/terraform-demux
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
@@ -8,4 +9,3 @@ builds:
       - darwin
     goarch:
       - amd64
-      - arm64
