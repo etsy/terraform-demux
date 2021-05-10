@@ -99,7 +99,7 @@ func (c *Client) ListReleases(ctx context.Context) (ListReleasesResponse, error)
 	}
 
 	if releases.ETag != "" {
-		req.Header.Set(`If-Modified-Since`, releases.ETag)
+		req.Header.Set(`If-None-Match`, releases.ETag)
 	}
 
 	resp, err := c.httpclient.Do(req)
