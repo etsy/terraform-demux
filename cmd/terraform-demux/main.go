@@ -1,17 +1,30 @@
 package main
 
 import (
+	"io/ioutil"
 	"log"
 	"os"
 
 	"github.com/etsy/terraform-demux/internal/wrapper"
 )
 
+var (
+	Version = "v0.0.1+dev"
+)
+
 func main() {
+	if os.Getenv("DEMUX_LOG") == "" {
+		log.SetOutput(ioutil.Discard)
+	}
+
+	log.Printf("terraform-demux version %s", Version)
+
 	exitCode, err := wrapper.RunTerraform(os.Args[1:])
 
 	if err != nil {
-		log.Fatal(err)
+		log.SetOutput(os.Stderr)
+
+		log.Fatal("error: ", err)
 	}
 
 	os.Exit(exitCode)

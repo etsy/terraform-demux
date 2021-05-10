@@ -3,6 +3,7 @@ package wrapper
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -80,9 +81,13 @@ func getTerraformVersionConstraints(directory string) ([]version.Constraints, er
 	currentDirectory := directory
 
 	for {
+		log.Printf("inspecting terraform module in %s", currentDirectory)
+
 		module, diags := tfconfig.LoadModule(currentDirectory)
 
-		if !diags.HasErrors() && len(module.RequiredCore) > 0 {
+		if diags.HasErrors() {
+			log.Printf("encountered error parsing configuration: %v", diags.Err())
+		} else if len(module.RequiredCore) > 0 {
 			var allConstraints []version.Constraints
 
 			for _, constraintString := range module.RequiredCore {
@@ -95,12 +100,16 @@ func getTerraformVersionConstraints(directory string) ([]version.Constraints, er
 				allConstraints = append(allConstraints, constraints)
 			}
 
+			log.Printf("found constraints: %v", allConstraints)
+
 			return allConstraints, nil
 		}
 
 		parentDirectory := filepath.Dir(currentDirectory)
 
 		if parentDirectory == currentDirectory {
+			log.Printf("no constraints found")
+
 			return nil, nil
 		}
 

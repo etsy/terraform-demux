@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -89,6 +90,8 @@ func (c *Client) ListReleases(ctx context.Context) (ListReleasesResponse, error)
 	if err != nil {
 		return releases, err
 	} else if isFresh {
+		log.Printf("using cached release list")
+
 		return releases, nil
 	}
 
@@ -101,6 +104,8 @@ func (c *Client) ListReleases(ctx context.Context) (ListReleasesResponse, error)
 	if releases.ETag != "" {
 		req.Header.Set(`If-None-Match`, releases.ETag)
 	}
+
+	log.Printf("downloading release index from Hashicorp")
 
 	resp, err := c.httpclient.Do(req)
 
@@ -233,10 +238,14 @@ func (c *Client) downloadBuild(b Build) (string, error) {
 	path := cachedExecutablePath(c.cacheDir, b)
 
 	if _, err := os.Stat(path); err == nil {
+		log.Printf("found cached Terraform executable at %s", path)
+
 		return path, nil
 	} else if !os.IsNotExist(err) {
-		return "", errors.Wrap(err, "could not stat terraform executable")
+		return "", errors.Wrap(err, "could not stat Terraform executable")
 	}
+
+	log.Printf("dowloading release archive from %s", b.URL)
 
 	zip, zipCleanupFunc, err := c.downloadZip(b.URL)
 
