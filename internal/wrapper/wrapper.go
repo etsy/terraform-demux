@@ -80,7 +80,7 @@ func getTerraformVersionConstraints(directory string) ([]version.Constraints, er
 	currentDirectory := directory
 
 	for {
-		module, diags := tfconfig.LoadModule(directory)
+		module, diags := tfconfig.LoadModule(currentDirectory)
 
 		if !diags.HasErrors() && len(module.RequiredCore) > 0 {
 			var allConstraints []version.Constraints
