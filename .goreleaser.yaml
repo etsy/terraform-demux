@@ -1,4 +1,3 @@
-project_name: terraform-demux
 builds:
   - main: ./cmd/terraform-demux
     env:
@@ -9,3 +8,12 @@ builds:
       - darwin
     goarch:
       - amd64
+
+brews:
+  - tap:
+      owner: etsy
+      name:  terraform-demux
+    folder: Formula
+    homepage: https://github.com/etsy/terraform-demux
+    description: A user-friendly launcher (à la Bazelisk) for Terraform.
+    license: "Apache-2.0"
