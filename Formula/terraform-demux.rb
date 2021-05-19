@@ -5,20 +5,23 @@
 class TerraformDemux < Formula
   desc "A user-friendly launcher (à la Bazelisk) for Terraform."
   homepage "https://github.com/etsy/terraform-demux"
-  version "0.0.3"
+  version "0.0.4"
   license "Apache-2.0"
   bottle :unneeded
 
   if OS.mac? && Hardware::CPU.intel?
-    url "https://github.com/etsy/terraform-demux/releases/download/v0.0.3/terraform-demux_0.0.3_darwin_amd64.tar.gz"
-    sha256 "a4734dfbd0fef62129ebc49fb309ffc966094c78cba52e6679e15fc6983ca859"
+    url "https://github.com/etsy/terraform-demux/releases/download/v0.0.4/terraform-demux_0.0.4_darwin_amd64.tar.gz"
+    sha256 "98daf919fc130fc271b7897df48ed0366f5b6243f352b07768f6a9b7b3ef38da"
   end
   if OS.linux? && Hardware::CPU.intel?
-    url "https://github.com/etsy/terraform-demux/releases/download/v0.0.3/terraform-demux_0.0.3_linux_amd64.tar.gz"
-    sha256 "dfff6d33ae363224eb30059c71843382bf27da3af7e6a2e9c88e61078184fd41"
+    url "https://github.com/etsy/terraform-demux/releases/download/v0.0.4/terraform-demux_0.0.4_linux_amd64.tar.gz"
+    sha256 "8830dd6f979d16c87f63a7a689d6105d22e7f82df3817c31f3515165c8f57899"
   end
+
+  conflicts_with "terraform"
 
   def install
     bin.install "terraform-demux"
+    bin.install_symlink bin/"terraform-demux" => "terraform"
   end
 end
