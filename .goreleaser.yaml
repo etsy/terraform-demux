@@ -20,3 +20,10 @@ brews:
     homepage:    https://github.com/etsy/terraform-demux
     description: A user-friendly launcher (à la Bazelisk) for Terraform.
     license:     "Apache-2.0"
+
+    conflicts:
+      - "terraform"
+
+    install: |
+      bin.install "terraform-demux"
+      bin.install_symlink bin/"terraform-demux" => "terraform"
