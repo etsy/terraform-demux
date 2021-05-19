@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	Version = "v0.0.1+dev"
+	version = "v0.0.1+dev"
 )
 
 func main() {
@@ -17,7 +17,7 @@ func main() {
 		log.SetOutput(ioutil.Discard)
 	}
 
-	log.Printf("terraform-demux version %s", Version)
+	log.Printf("terraform-demux version %s", version)
 
 	exitCode, err := wrapper.RunTerraform(os.Args[1:])
 
