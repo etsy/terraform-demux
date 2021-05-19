@@ -35,7 +35,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           export MESSAGE="chore: regenerate homebrew formula"
-          export SHA=$(git rev-parse --verify main:Formula/terraform-demux.rb)
+          export SHA=$(git rev-parse --verify origin/main:Formula/terraform-demux.rb)
           export CONTENT=$(base64 -i dist/terraform-demux.rb)
           gh api --method PUT /repos/:owner/:repo/contents/Formula/terraform-demux.rb \
             --field message="$MESSAGE" \
