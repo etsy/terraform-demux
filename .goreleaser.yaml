@@ -14,11 +14,8 @@ brews:
       owner: etsy
       name:  terraform-demux
 
-    folder: Formula
-
-    commit_author:
-      name:  github-actions[bot]
-      email: 41898282+github-actions[bot]@users.noreply.github.com
+    folder:      Formula
+    skip_upload: true
 
     homepage:    https://github.com/etsy/terraform-demux
     description: A user-friendly launcher (à la Bazelisk) for Terraform.

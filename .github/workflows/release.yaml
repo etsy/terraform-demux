@@ -29,3 +29,17 @@ jobs:
           args: release --rm-dist
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit homebrew forumulaa
+        env:
+          GITHUB_TOKEN:   ${{ secrets.GITHUB_TOKEN }}
+          FILE_TO_COMMIT: Formula/terraform-demux.rb
+        run: |
+          export MESSAGE="chore: regenerate $FILE_TO_COMMIT"
+          export SHA=$(git rev-parse --verify main:$FILE_TO_COMMIT)
+          export CONTENT=$(base64 -i $FILE_TO_COMMIT)
+          gh api --method PUT /repos/:owner/:repo/contents/$FILE_TO_COMMIT \
+            --field message="$MESSAGE" \
+            --field content="$CONTENT" \
+            --field encoding="base64" \
+            --field sha="$SHA"
