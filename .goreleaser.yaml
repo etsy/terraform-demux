@@ -13,7 +13,13 @@ brews:
   - tap:
       owner: etsy
       name:  terraform-demux
+
     folder: Formula
-    homepage: https://github.com/etsy/terraform-demux
+
+    commit_author:
+      name:  github-actions[bot]
+      email: 41898282+github-actions[bot]@users.noreply.github.com
+
+    homepage:    https://github.com/etsy/terraform-demux
     description: A user-friendly launcher (à la Bazelisk) for Terraform.
-    license: "Apache-2.0"
+    license:     "Apache-2.0"
