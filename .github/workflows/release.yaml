@@ -32,13 +32,12 @@ jobs:
 
       - name: Commit homebrew forumulaa
         env:
-          GITHUB_TOKEN:   ${{ secrets.GITHUB_TOKEN }}
-          FILE_TO_COMMIT: Formula/terraform-demux.rb
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          export MESSAGE="chore: regenerate $FILE_TO_COMMIT"
-          export SHA=$(git rev-parse --verify main:$FILE_TO_COMMIT)
-          export CONTENT=$(base64 -i $FILE_TO_COMMIT)
-          gh api --method PUT /repos/:owner/:repo/contents/$FILE_TO_COMMIT \
+          export MESSAGE="chore: regenerate homebrew formula"
+          export SHA=$(git rev-parse --verify main:Formula/terraform-demux.rb)
+          export CONTENT=$(base64 -i dist/terraform-demux.rb)
+          gh api --method PUT /repos/:owner/:repo/contents/Formula/terraform-demux.rb \
             --field message="$MESSAGE" \
             --field content="$CONTENT" \
             --field encoding="base64" \
