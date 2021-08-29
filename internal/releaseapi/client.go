@@ -11,208 +11,78 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
-	"time"
 
-	"github.com/hashicorp/go-version"
+	"github.com/Masterminds/semver/v3"
+	"github.com/gregjones/httpcache"
+	"github.com/gregjones/httpcache/diskcache"
 	"github.com/pkg/errors"
 )
 
 const (
-	releaseCacheTTL = 1 * time.Hour
-	releasesURL     = "https://releases.hashicorp.com/terraform/index.json"
+	releasesURL = "https://releases.hashicorp.com/terraform/index.json"
 )
 
-type ListReleasesResponse struct {
-	ETag     string    `json:"etag"`
-	Releases []Release `json:"releases"`
+type ReleaseIndex struct {
+	Versions map[string]Release `json:"versions"`
 }
 
 type Release struct {
-	Version *version.Version `json:"version"`
-	Builds  []Build          `json:"builds"`
-}
-
-func (r *Release) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Version string
-		Builds  []Build
-	}{r.Version.String(), r.Builds})
-}
-
-func (r *Release) UnmarshalJSON(value []byte) error {
-	raw := struct {
-		Version string
-		Builds  []Build
-	}{}
-
-	if err := json.Unmarshal(value, &raw); err != nil {
-		return err
-	}
-
-	parsedVersion, err := version.NewVersion(raw.Version)
-
-	if err != nil {
-		return errors.Wrap(err, "could not parse version from string")
-	}
-
-	r.Version = parsedVersion
-	r.Builds = raw.Builds
-
-	return nil
+	Version *semver.Version `json:"version"`
+	Builds  []Build         `json:"builds"`
 }
 
 type Build struct {
-	VersionString string `json:"version"`
-	OS            string `json:"os"`
-	Arch          string `json:"arch"`
-	URL           string `json:"url"`
+	Version *semver.Version `json:"version"`
+	OS      string          `json:"os"`
+	Arch    string          `json:"arch"`
+	URL     string          `json:"url"`
 }
-
-type ReleaseList []Release
-
-func (l ReleaseList) Len() int           { return len(l) }
-func (l ReleaseList) Less(i, j int) bool { return l[i].Version.LessThan(l[j].Version) }
-func (l ReleaseList) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
 
 type Client struct {
-	httpclient *http.Client
 	cacheDir   string
+	httpClient *http.Client
 }
 
-func NewClient(httpclient *http.Client, cacheDir string) *Client {
-	return &Client{httpclient, cacheDir}
+func NewClient(cacheDir string) *Client {
+	httpClient := httpcache.NewTransport(
+		diskcache.New(cacheDir),
+	).Client()
+
+	return &Client{cacheDir, httpClient}
 }
 
-func (c *Client) ListReleases(ctx context.Context) (ListReleasesResponse, error) {
-	releases, isFresh, err := c.getCachedReleaseList()
+func (c *Client) ListReleases(ctx context.Context) (ReleaseIndex, error) {
+	var releaseIndex ReleaseIndex
+
+	log.Printf("downloading Terraform release index")
+
+	request, err := http.NewRequest("GET", releasesURL, nil)
 
 	if err != nil {
-		return releases, err
-	} else if isFresh {
-		log.Printf("using cached release list")
-
-		return releases, nil
+		return releaseIndex, errors.Wrap(err, "could not create request for Terraform release index")
 	}
 
-	req, err := http.NewRequest("GET", releasesURL, nil)
+	response, err := c.httpClient.Do(request)
 
 	if err != nil {
-		return releases, errors.Wrap(err, "could not create request")
+		return releaseIndex, errors.Wrap(err, "could not send request for Terraform release index")
+	} else if response.StatusCode != http.StatusOK {
+		return releaseIndex, errors.Errorf("error: unexpected status code '%s' in response", response.StatusCode)
 	}
 
-	if releases.ETag != "" {
-		req.Header.Set(`If-None-Match`, releases.ETag)
+	if response.Header.Get(httpcache.XFromCache) != "" {
+		log.Printf("using cached response")
 	}
 
-	log.Printf("downloading release index from Hashicorp")
+	defer response.Body.Close()
 
-	resp, err := c.httpclient.Do(req)
+	decoder := json.NewDecoder(response.Body)
 
-	if err != nil {
-		return releases, errors.Wrap(err, "could not send request")
+	if err := decoder.Decode(&releaseIndex); err != nil {
+		return releaseIndex, errors.Wrap(err, "could not unmarshal release index JSON")
 	}
 
-	if resp.StatusCode == http.StatusOK {
-		releases, err = c.parseReleaseIndexResponse(resp)
-
-		if err != nil {
-			return releases, err
-		}
-	} else if resp.StatusCode != http.StatusNotModified {
-		return releases, errors.Errorf("unexpected status code in response: %v", resp)
-	}
-
-	if err := c.saveCachedReleaseList(releases); err != nil {
-		return releases, err
-	}
-
-	return releases, nil
-}
-
-func (c *Client) getCachedReleaseList() (ListReleasesResponse, bool, error) {
-	var cachedList ListReleasesResponse
-
-	file, err := os.Open(cachedReleaseListPath(c.cacheDir))
-
-	if err != nil {
-		if os.IsNotExist(err) {
-			return cachedList, false, nil
-		}
-
-		return cachedList, false, errors.Wrap(err, "could not open cached releases file")
-	}
-
-	decoder := json.NewDecoder(file)
-
-	if err := decoder.Decode(&cachedList); err != nil {
-		return cachedList, false, errors.Wrap(err, "could not parse cached releases file")
-	}
-
-	// check freshness
-
-	finfo, err := file.Stat()
-
-	if err != nil {
-		return cachedList, false, errors.Wrap(err, "could not stat cached releases file")
-	}
-
-	isFresh := time.Now().Sub(finfo.ModTime()) <= releaseCacheTTL
-
-	return cachedList, isFresh, nil
-}
-
-func (c *Client) saveCachedReleaseList(resp ListReleasesResponse) error {
-	file, err := os.Create(cachedReleaseListPath(c.cacheDir))
-
-	if err != nil {
-		return errors.Wrap(err, "could not create cached releases file")
-	}
-
-	encoder := json.NewEncoder(file)
-
-	if err := encoder.Encode(resp); err != nil {
-		return errors.Wrap(err, "could not write out cached releases file")
-	}
-
-	return nil
-}
-
-func (c *Client) parseReleaseIndexResponse(resp *http.Response) (ListReleasesResponse, error) {
-	defer resp.Body.Close()
-
-	var parsedResponse ListReleasesResponse
-
-	parsedResponse.ETag = resp.Header.Get("ETag")
-
-	expectedBody := struct {
-		Versions map[string]struct {
-			Builds []Build `json:"builds"`
-		} `json:"versions"`
-	}{}
-
-	decoder := json.NewDecoder(resp.Body)
-
-	if err := decoder.Decode(&expectedBody); err != nil {
-		return parsedResponse, errors.Wrap(err, "could not unmarshal release index JSON")
-	}
-
-	for vString, vStruct := range expectedBody.Versions {
-		parsedVersion, err := version.NewVersion(vString)
-
-		if err != nil {
-			return parsedResponse, errors.Wrap(err, "got invalid version in release index")
-		}
-
-		parsedResponse.Releases = append(
-			parsedResponse.Releases,
-			Release{parsedVersion, vStruct.Builds},
-		)
-	}
-
-	sort.Sort(sort.Reverse(ReleaseList(parsedResponse.Releases)))
-
-	return parsedResponse, nil
+	return releaseIndex, nil
 }
 
 func (c *Client) DownloadRelease(r Release, os, arch string) (string, error) {
@@ -234,8 +104,8 @@ func (c *Client) DownloadRelease(r Release, os, arch string) (string, error) {
 	return c.downloadBuild(matchingBuild)
 }
 
-func (c *Client) downloadBuild(b Build) (string, error) {
-	path := cachedExecutablePath(c.cacheDir, b)
+func (c *Client) downloadBuild(build Build) (string, error) {
+	path := cachedExecutablePath(c.cacheDir, build)
 
 	if _, err := os.Stat(path); err == nil {
 		log.Printf("found cached Terraform executable at %s", path)
@@ -245,14 +115,18 @@ func (c *Client) downloadBuild(b Build) (string, error) {
 		return "", errors.Wrap(err, "could not stat Terraform executable")
 	}
 
-	log.Printf("dowloading release archive from %s", b.URL)
+	log.Printf("dowloading release archive from %s", build.URL)
 
-	zip, zipCleanupFunc, err := c.downloadZip(b.URL)
-
-	defer zipCleanupFunc()
+	zipFile, zipLength, err := c.downloadReleaseArchive(build)
 
 	if err != nil {
 		return "", err
+	}
+
+	zipReader, err := zip.NewReader(zipFile, zipLength)
+
+	if err != nil {
+		return "", errors.Wrap(err, "could not unzip release archive")
 	}
 
 	destination, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0755)
@@ -260,12 +134,12 @@ func (c *Client) downloadBuild(b Build) (string, error) {
 	defer destination.Close()
 
 	if err != nil {
-		return "", errors.Wrap(err, "could not create destination file")
+		return "", errors.Wrap(err, "could not create destination file for executable")
 	}
 
-	var copied bool
+	var found bool
 
-	for _, f := range zip.File {
+	for _, f := range zipReader.File {
 		if filepath.Base(f.Name) != "terraform" {
 			continue
 		}
@@ -275,61 +149,57 @@ func (c *Client) downloadBuild(b Build) (string, error) {
 		defer source.Close()
 
 		if err != nil {
-			return "", errors.Wrap(err, "could not open executable in release archive")
+			return "", errors.Wrap(err, "could not read executable in release archive")
 		}
 
 		if _, err := io.Copy(destination, source); err != nil {
 			return "", errors.Wrap(err, "could not copy executable to destination")
 		}
 
-		copied = true
+		found = true
 	}
 
-	if !copied {
+	if !found {
 		return "", errors.New("could not find executable named 'terraform' in release archive")
 	}
 
 	return path, nil
 }
 
-func (c *Client) downloadZip(url string) (*zip.Reader, func() error, error) {
-	cleanupFunc := func() error { return nil }
-
-	resp, err := c.httpclient.Get(url)
-
-	defer resp.Body.Close()
+func (c *Client) downloadReleaseArchive(build Build) (*os.File, int64, error) {
+	request, err := http.NewRequest("GET", build.URL, nil)
 
 	if err != nil {
-		return nil, cleanupFunc, errors.Wrap(err, "could not download release archive")
-	} else if resp.StatusCode != http.StatusOK {
-		return nil, cleanupFunc, errors.Errorf("unexpected status code in response: %v", resp)
+		return nil, 0, errors.Wrap(err, "could not create request for release archive")
 	}
 
-	tmp, err := ioutil.TempFile("", filepath.Base(url))
+	request.Header.Set("Cache-Control", "no-store")
 
-	cleanupFunc = tmp.Close
+	response, err := c.httpClient.Do(request)
+
+	defer response.Body.Close()
 
 	if err != nil {
-		return nil, cleanupFunc, errors.Wrap(err, "could not create temporary file")
+		return nil, 0, errors.Wrap(err, "could not download release archive")
+	} else if response.StatusCode != http.StatusOK {
+		return nil, 0, errors.Errorf("unexpected status code '%s' in response", response.StatusCode)
 	}
 
-	length, err := io.Copy(tmp, resp.Body)
+	tmp, err := ioutil.TempFile("", filepath.Base(build.URL))
 
 	if err != nil {
-		return nil, cleanupFunc, errors.Wrap(err, "could not copy release zip")
+		return nil, 0, errors.Wrap(err, "could not create temporary file for release archive")
 	}
 
-	reader, err := zip.NewReader(tmp, length)
-
-	if err != nil {
-		return nil, cleanupFunc, errors.Wrap(err, "could not read release archive")
+	if _, err := io.Copy(tmp, response.Body); err != nil {
+		return nil, 0, errors.Wrap(err, "could not copy release archive to temporary file")
 	}
 
-	return reader, cleanupFunc, nil
+	return tmp, response.ContentLength, nil
 }
 
 func cachedReleaseListPath(cacheDir string) string {
-	return filepath.Join(cacheDir, "terraform-releases.json")
+	return filepath.Join(cacheDir, "terraform-releases")
 }
 
 func cachedExecutablePath(cacheDir string, b Build) string {
@@ -337,5 +207,5 @@ func cachedExecutablePath(cacheDir string, b Build) string {
 }
 
 func executableName(b Build) string {
-	return fmt.Sprintf("terraform_%s_%s_%s", b.VersionString, b.OS, b.Arch)
+	return fmt.Sprintf("terraform_%s_%s_%s", b.Version.String(), b.OS, b.Arch)
 }

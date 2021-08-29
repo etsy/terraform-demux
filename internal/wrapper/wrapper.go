@@ -4,17 +4,17 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"syscall"
 
 	"github.com/etsy/terraform-demux/internal/releaseapi"
 
-	"github.com/hashicorp/go-version"
+	"github.com/Masterminds/semver/v3"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/pkg/errors"
 )
@@ -38,19 +38,21 @@ func RunTerraform(args []string) (int, error) {
 		return 1, err
 	}
 
-	client := releaseapi.NewClient(&http.Client{}, cacheDirectory)
+	client := releaseapi.NewClient(cacheDirectory)
 
-	listResponse, err := client.ListReleases(context.TODO())
+	releaseIndex, err := client.ListReleases(context.TODO())
+
+	if err != nil {
+		return 1, err
+	}
+
+	matchingRelease, err := filterReleases(releaseIndex, terraformVersionConstraints)
 
 	if err != nil {
 		return 1, err
 	}
 
-	matchingRelease, err := filterReleases(listResponse.Releases, terraformVersionConstraints)
-
-	if err != nil {
-		return 1, err
-	}
+	log.Printf("version '%s' matches all constraints", matchingRelease.Version)
 
 	executablePath, err := client.DownloadRelease(matchingRelease, runtime.GOOS, runtime.GOARCH)
 
@@ -77,7 +79,7 @@ func ensureCacheDirectory() (string, error) {
 	return wrapperCacheDir, nil
 }
 
-func getTerraformVersionConstraints(directory string) ([]version.Constraints, error) {
+func getTerraformVersionConstraints(directory string) ([]*semver.Constraints, error) {
 	currentDirectory := directory
 
 	for {
@@ -88,10 +90,10 @@ func getTerraformVersionConstraints(directory string) ([]version.Constraints, er
 		if diags.HasErrors() {
 			log.Printf("encountered error parsing configuration: %v", diags.Err())
 		} else if len(module.RequiredCore) > 0 {
-			var allConstraints []version.Constraints
+			var allConstraints []*semver.Constraints
 
 			for _, constraintString := range module.RequiredCore {
-				constraints, err := version.NewConstraint(constraintString)
+				constraints, err := semver.NewConstraint(constraintString)
 
 				if err != nil {
 					return nil, errors.Wrap(err, "could not determine constraint from string")
@@ -117,17 +119,29 @@ func getTerraformVersionConstraints(directory string) ([]version.Constraints, er
 	}
 }
 
-func filterReleases(releases []releaseapi.Release, constraints []version.Constraints) (releaseapi.Release, error) {
+func filterReleases(index releaseapi.ReleaseIndex, constraints []*semver.Constraints) (releaseapi.Release, error) {
+	var versions semver.Collection
+
+	for _, release := range index.Versions {
+		if release.Version.Prerelease() != "" {
+			continue
+		}
+
+		versions = append(versions, release.Version)
+	}
+
+	sort.Sort(sort.Reverse(versions))
+
 ReleaseVersionLoop:
-	for _, release := range releases {
+	for _, version := range versions {
 		for _, constraint := range constraints {
-			if !constraint.Check(release.Version) {
+			if !constraint.Check(version) {
 				continue ReleaseVersionLoop
 			}
 		}
 
 		// this version matched all of the constraints, so we return early
-		return release, nil
+		return index.Versions[version.String()], nil
 	}
 
 	// no version matches all constraints
