@@ -25,7 +25,7 @@ Simply navigate to any folder that contains Terraform configuration and run `ter
 
 ### Logging
 
-Setting the `DEMUX_LOG` environment variable to any non-empty value will cause `terraform-demux` to write out debug logs to `stderr`.
+Setting the `TF_DEMUX_LOG` environment variable to any non-empty value will cause `terraform-demux` to write out debug logs to `stderr`.
 
 ## Cache Directory
 

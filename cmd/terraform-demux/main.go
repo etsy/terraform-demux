@@ -13,7 +13,7 @@ var (
 )
 
 func main() {
-	if os.Getenv("DEMUX_LOG") == "" {
+	if os.Getenv("TF_DEMUX_LOG") == "" {
 		log.SetOutput(ioutil.Discard)
 	}
 
