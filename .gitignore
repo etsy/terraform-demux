@@ -1,1 +1,5 @@
+# ignore built binaries
 /terraform-demux
+
+# ignore test output
+test-log
