@@ -1,7 +1,6 @@
 package wrapper
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
@@ -40,7 +39,7 @@ func RunTerraform(args []string) (int, error) {
 
 	client := releaseapi.NewClient(cacheDirectory)
 
-	releaseIndex, err := client.ListReleases(context.TODO())
+	releaseIndex, err := client.ListReleases()
 
 	if err != nil {
 		return 1, err

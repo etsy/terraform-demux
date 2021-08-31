@@ -2,7 +2,6 @@ package releaseapi
 
 import (
 	"archive/zip"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -51,7 +50,7 @@ func NewClient(cacheDir string) *Client {
 	return &Client{cacheDir, httpClient}
 }
 
-func (c *Client) ListReleases(ctx context.Context) (ReleaseIndex, error) {
+func (c *Client) ListReleases() (ReleaseIndex, error) {
 	var releaseIndex ReleaseIndex
 
 	log.Printf("downloading Terraform release index")
