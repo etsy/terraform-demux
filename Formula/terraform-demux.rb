@@ -5,17 +5,22 @@
 class TerraformDemux < Formula
   desc "A user-friendly launcher (à la Bazelisk) for Terraform."
   homepage "https://github.com/etsy/terraform-demux"
-  version "0.0.4"
+  version "0.0.5"
   license "Apache-2.0"
   bottle :unneeded
 
-  if OS.mac? && Hardware::CPU.intel?
-    url "https://github.com/etsy/terraform-demux/releases/download/v0.0.4/terraform-demux_0.0.4_darwin_amd64.tar.gz"
-    sha256 "98daf919fc130fc271b7897df48ed0366f5b6243f352b07768f6a9b7b3ef38da"
+  on_macos do
+    if Hardware::CPU.intel?
+      url "https://github.com/etsy/terraform-demux/releases/download/v0.0.5/terraform-demux_0.0.5_darwin_amd64.tar.gz"
+      sha256 "704d29ea131c18a3d2e90527d18f79343740d0faa0364eb824ce26cd2e440d9d"
+    end
   end
-  if OS.linux? && Hardware::CPU.intel?
-    url "https://github.com/etsy/terraform-demux/releases/download/v0.0.4/terraform-demux_0.0.4_linux_amd64.tar.gz"
-    sha256 "8830dd6f979d16c87f63a7a689d6105d22e7f82df3817c31f3515165c8f57899"
+
+  on_linux do
+    if Hardware::CPU.intel?
+      url "https://github.com/etsy/terraform-demux/releases/download/v0.0.5/terraform-demux_0.0.5_linux_amd64.tar.gz"
+      sha256 "18610d18541b574ea0e07ec436102da878a9e94a6d15fdd8aef759cca82460e1"
+    end
   end
 
   conflicts_with "terraform"
