@@ -5,21 +5,21 @@
 class TerraformDemux < Formula
   desc "A user-friendly launcher (à la Bazelisk) for Terraform."
   homepage "https://github.com/etsy/terraform-demux"
-  version "0.0.5"
+  version "1.0.0"
   license "Apache-2.0"
   bottle :unneeded
 
   on_macos do
     if Hardware::CPU.intel?
-      url "https://github.com/etsy/terraform-demux/releases/download/v0.0.5/terraform-demux_0.0.5_darwin_amd64.tar.gz"
-      sha256 "704d29ea131c18a3d2e90527d18f79343740d0faa0364eb824ce26cd2e440d9d"
+      url "https://github.com/etsy/terraform-demux/releases/download/v1.0.0/terraform-demux_1.0.0_darwin_amd64.tar.gz"
+      sha256 "4e489a7dc25414ea291c968326962cbc2e3a7f9812e4216470c358b9e96b9ef6"
     end
   end
 
   on_linux do
     if Hardware::CPU.intel?
-      url "https://github.com/etsy/terraform-demux/releases/download/v0.0.5/terraform-demux_0.0.5_linux_amd64.tar.gz"
-      sha256 "18610d18541b574ea0e07ec436102da878a9e94a6d15fdd8aef759cca82460e1"
+      url "https://github.com/etsy/terraform-demux/releases/download/v1.0.0/terraform-demux_1.0.0_linux_amd64.tar.gz"
+      sha256 "bfc64bd595619e9e8b6b9618a6585d659106c1735116f1ac6e4bf819c8f1ea31"
     end
   end
 
