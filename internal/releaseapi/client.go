@@ -14,6 +14,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/gregjones/httpcache"
 	"github.com/gregjones/httpcache/diskcache"
+	"github.com/natefinch/atomic"
 	"github.com/pkg/errors"
 )
 
@@ -122,21 +123,13 @@ func (c *Client) downloadBuild(build Build) (string, error) {
 		return "", err
 	}
 
+	defer zipFile.Close()
+
 	zipReader, err := zip.NewReader(zipFile, zipLength)
 
 	if err != nil {
 		return "", errors.Wrap(err, "could not unzip release archive")
 	}
-
-	destination, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0755)
-
-	if err != nil {
-		return "", errors.Wrap(err, "could not create destination file for executable")
-	}
-
-	defer destination.Close()
-
-	var found bool
 
 	for _, f := range zipReader.File {
 		if filepath.Base(f.Name) != "terraform" {
@@ -146,23 +139,23 @@ func (c *Client) downloadBuild(build Build) (string, error) {
 		source, err := f.Open()
 
 		if err != nil {
-			return "", errors.Wrap(err, "could not read executable in release archive")
+			return "", errors.Wrap(err, "could not read binary in release archive")
 		}
 
 		defer source.Close()
 
-		if _, err := io.Copy(destination, source); err != nil {
-			return "", errors.Wrap(err, "could not copy executable to destination")
+		if err := atomic.WriteFile(path, source); err != nil {
+			return "", errors.Wrap(err, "could not write binary to the cache directory")
 		}
 
-		found = true
+		if err := os.Chmod(path, 0700); err != nil {
+			return "", errors.Wrap(err, "could not make binary executable")
+		}
+
+		return path, nil
 	}
 
-	if !found {
-		return "", errors.New("could not find executable named 'terraform' in release archive")
-	}
-
-	return path, nil
+	return "", errors.New("could not find executable named 'terraform' in release archive")
 }
 
 func (c *Client) downloadReleaseArchive(build Build) (*os.File, int64, error) {
