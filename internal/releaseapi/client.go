@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/google/renameio"
 	"github.com/gregjones/httpcache"
 	"github.com/gregjones/httpcache/diskcache"
 	"github.com/pkg/errors"
@@ -128,12 +129,16 @@ func (c *Client) downloadBuild(build Build) (string, error) {
 		return "", errors.Wrap(err, "could not unzip release archive")
 	}
 
-	destination, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0755)
+	destination, err := renameio.TempFile("", path)
+
+	if err != nil {
+		return "", errors.Wrap(err, "could not create temporary file for executable")
+	}
 
 	defer destination.Close()
 
-	if err != nil {
-		return "", errors.Wrap(err, "could not create destination file for executable")
+	if err := destination.Chmod(0700); err != nil {
+		return "", errors.Wrap(err, "could not make temporary file executable")
 	}
 
 	var found bool
@@ -145,14 +150,18 @@ func (c *Client) downloadBuild(build Build) (string, error) {
 
 		source, err := f.Open()
 
-		defer source.Close()
-
 		if err != nil {
 			return "", errors.Wrap(err, "could not read executable in release archive")
 		}
 
+		defer source.Close()
+
 		if _, err := io.Copy(destination, source); err != nil {
-			return "", errors.Wrap(err, "could not copy executable to destination")
+			return "", errors.Wrap(err, "could not copy executable to temporary file")
+		}
+
+		if err := destination.CloseAtomicallyReplace(); err != nil {
+			return "", errors.Wrap(err, "could not move executable to destination")
 		}
 
 		found = true
@@ -176,11 +185,13 @@ func (c *Client) downloadReleaseArchive(build Build) (*os.File, int64, error) {
 
 	response, err := c.httpClient.Do(request)
 
-	defer response.Body.Close()
-
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "could not download release archive")
-	} else if response.StatusCode != http.StatusOK {
+	}
+
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
 		return nil, 0, errors.Errorf("unexpected status code '%s' in response", response.StatusCode)
 	}
 
@@ -195,10 +206,6 @@ func (c *Client) downloadReleaseArchive(build Build) (*os.File, int64, error) {
 	}
 
 	return tmp, response.ContentLength, nil
-}
-
-func cachedReleaseListPath(cacheDir string) string {
-	return filepath.Join(cacheDir, "terraform-releases")
 }
 
 func cachedExecutablePath(cacheDir string, b Build) string {
