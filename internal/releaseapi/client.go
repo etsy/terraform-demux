@@ -14,6 +14,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/gregjones/httpcache"
 	"github.com/gregjones/httpcache/diskcache"
+	"github.com/natefinch/atomic"
 	"github.com/pkg/errors"
 )
 
@@ -122,21 +123,13 @@ func (c *Client) downloadBuild(build Build) (string, error) {
 		return "", err
 	}
 
+	defer zipFile.Close()
+
 	zipReader, err := zip.NewReader(zipFile, zipLength)
 
 	if err != nil {
 		return "", errors.Wrap(err, "could not unzip release archive")
 	}
-
-	destination, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0755)
-
-	defer destination.Close()
-
-	if err != nil {
-		return "", errors.Wrap(err, "could not create destination file for executable")
-	}
-
-	var found bool
 
 	for _, f := range zipReader.File {
 		if filepath.Base(f.Name) != "terraform" {
@@ -145,24 +138,24 @@ func (c *Client) downloadBuild(build Build) (string, error) {
 
 		source, err := f.Open()
 
+		if err != nil {
+			return "", errors.Wrap(err, "could not read binary in release archive")
+		}
+
 		defer source.Close()
 
-		if err != nil {
-			return "", errors.Wrap(err, "could not read executable in release archive")
+		if err := atomic.WriteFile(path, source); err != nil {
+			return "", errors.Wrap(err, "could not write binary to the cache directory")
 		}
 
-		if _, err := io.Copy(destination, source); err != nil {
-			return "", errors.Wrap(err, "could not copy executable to destination")
+		if err := os.Chmod(path, 0700); err != nil {
+			return "", errors.Wrap(err, "could not make binary executable")
 		}
 
-		found = true
+		return path, nil
 	}
 
-	if !found {
-		return "", errors.New("could not find executable named 'terraform' in release archive")
-	}
-
-	return path, nil
+	return "", errors.New("could not find executable named 'terraform' in release archive")
 }
 
 func (c *Client) downloadReleaseArchive(build Build) (*os.File, int64, error) {
@@ -176,11 +169,13 @@ func (c *Client) downloadReleaseArchive(build Build) (*os.File, int64, error) {
 
 	response, err := c.httpClient.Do(request)
 
-	defer response.Body.Close()
-
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "could not download release archive")
-	} else if response.StatusCode != http.StatusOK {
+	}
+
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
 		return nil, 0, errors.Errorf("unexpected status code '%s' in response", response.StatusCode)
 	}
 
@@ -195,10 +190,6 @@ func (c *Client) downloadReleaseArchive(build Build) (*os.File, int64, error) {
 	}
 
 	return tmp, response.ContentLength, nil
-}
-
-func cachedReleaseListPath(cacheDir string) string {
-	return filepath.Join(cacheDir, "terraform-releases")
 }
 
 func cachedExecutablePath(cacheDir string, b Build) string {
