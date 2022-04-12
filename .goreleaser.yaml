@@ -9,6 +9,9 @@ builds:
     goarch:
       - amd64
 
+universal_binaries:
+  - replace: true
+  
 brews:
   - tap:
       owner: etsy
