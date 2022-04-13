@@ -3,3 +3,4 @@
 
 # ignore test output
 test-log
+dist
