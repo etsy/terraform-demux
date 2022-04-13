@@ -5,13 +5,22 @@
 class TerraformDemux < Formula
   desc "A user-friendly launcher (à la Bazelisk) for Terraform."
   homepage "https://github.com/etsy/terraform-demux"
-  version "1.0.1"
+  version "1.0.2"
   license "Apache-2.0"
 
   on_macos do
+    if Hardware::CPU.arm?
+      url "https://github.com/etsy/terraform-demux/releases/download/v1.0.2/terraform-demux_1.0.2_darwin_arm64.tar.gz"
+      sha256 "fcd245b93b1a9d0b519d08d1d0879bca17480ec23ad9bea16f063a50bebed5d5"
+
+      def install
+        bin.install "terraform-demux"
+        bin.install_symlink bin/"terraform-demux" => "terraform"
+      end
+    end
     if Hardware::CPU.intel?
-      url "https://github.com/etsy/terraform-demux/releases/download/v1.0.1/terraform-demux_1.0.1_darwin_amd64.tar.gz"
-      sha256 "12d5baef941b31c6f443e3baf95d70fad7f6afe2f03a4a447f6791d3fead6400"
+      url "https://github.com/etsy/terraform-demux/releases/download/v1.0.2/terraform-demux_1.0.2_darwin_amd64.tar.gz"
+      sha256 "812018f0a2e6971ad7214172c6dc1cd2531d4c3cc8362259827ee6a68c2be3d4"
 
       def install
         bin.install "terraform-demux"
@@ -22,8 +31,17 @@ class TerraformDemux < Formula
 
   on_linux do
     if Hardware::CPU.intel?
-      url "https://github.com/etsy/terraform-demux/releases/download/v1.0.1/terraform-demux_1.0.1_linux_amd64.tar.gz"
-      sha256 "12c64cf38098d06e91f8ff0effee72e68b1ded7644c374cf2056ad77e0c1ee9d"
+      url "https://github.com/etsy/terraform-demux/releases/download/v1.0.2/terraform-demux_1.0.2_linux_amd64.tar.gz"
+      sha256 "3c68f4b0e749486b78bc8a8acb845955fb7fd5f085e67622456cafb42849f5ef"
+
+      def install
+        bin.install "terraform-demux"
+        bin.install_symlink bin/"terraform-demux" => "terraform"
+      end
+    end
+    if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
+      url "https://github.com/etsy/terraform-demux/releases/download/v1.0.2/terraform-demux_1.0.2_linux_arm64.tar.gz"
+      sha256 "ec5d7d9c8cbcd63b4dec504daeccd68591633e01b176605360c36364d4999ca7"
 
       def install
         bin.install "terraform-demux"
