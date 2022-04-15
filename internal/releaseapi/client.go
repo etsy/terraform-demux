@@ -96,9 +96,21 @@ func (c *Client) DownloadRelease(r Release, os, arch string) (string, error) {
 	}
 
 	if matchingBuild.URL == "" {
-		return "", errors.Errorf(
-			"could not find matching build for OS '%s' and arch '%s'", os, arch,
-		)
+		// Let's catch M1 Macs that don't have a build yet and make them use rosetta2
+		if os == "darwin" && arch == "arm64" {
+			arch = "amd64"
+			for _, build := range r.Builds {
+				if build.OS == os && build.Arch == arch {
+					matchingBuild = build
+					break
+				}
+			}
+		} else {
+			return "", errors.Errorf(
+				"could not find matching build for OS '%s' and arch '%s'", os, arch,
+			)
+		}
+
 	}
 
 	return c.downloadBuild(matchingBuild)
