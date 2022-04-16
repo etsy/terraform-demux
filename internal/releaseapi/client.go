@@ -22,7 +22,8 @@ import (
 )
 
 const (
-	releasesURL = "https://releases.hashicorp.com/terraform/index.json"
+	releasesURL    = "https://releases.hashicorp.com/terraform/index.json"
+	releaseRootURL = "https://releases.hashicorp.com/terraform"
 )
 
 type ReleaseIndex struct {
@@ -99,6 +100,12 @@ func (c *Client) DownloadRelease(r Release, os, arch string) (string, error) {
 		}
 	}
 
+	if matchingBuild.URL == "" {
+		return "", errors.Errorf(
+			"could not find matching build for OS '%s' and arch '%s'", os, arch,
+		)
+	}
+
 	checkSums, err := c.getReleaseCheckSums(r)
 	if err != nil {
 		return "", errors.Wrap(err, "could not download checksum file")
@@ -112,80 +119,82 @@ func (c *Client) DownloadRelease(r Release, os, arch string) (string, error) {
 		}
 	}
 
-	if matchingBuild.URL == "" {
-		return "", errors.Errorf(
-			"could not find matching build for OS '%s' and arch '%s'", os, arch,
-		)
-	}
-
-	build, sha256sum, err := c.downloadBuild(matchingBuild)
-	if sha256sum != nil { // new download
-		if checkSha256Sum != hex.EncodeToString(sha256sum) {
-			return "", errors.Errorf(
-				"checksum for %s should be %s, got %s", matchingBuild.URL, checkSha256Sum, hex.EncodeToString(sha256sum),
-			)
-		} else {
-			log.Printf("check sum match\n")
-		}
-	}
-
+	build, err := c.downloadBuild(matchingBuild, checkSha256Sum)
 	return build, err
 }
 
 func (c *Client) getReleaseCheckSums(release Release) (string, error) {
-	shaSumFile, _, err := c.downloadReleaseArchive(release.ShaSumsURL())
-	defer os.Remove(shaSumFile.Name())
-	defer shaSumFile.Close()
+	request, err := http.NewRequest("GET", release.ShaSumsURL(), nil)
 	if err != nil {
-		return "", errors.Wrap(err, "could not download checksum file")
+		return "", errors.Wrap(err, "could not create request for Terraform release checksum")
 	}
-	checkSums, err := os.ReadFile(shaSumFile.Name())
-	return string(checkSums), err
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return "", errors.Wrap(err, "could not send request for Terraform release checksum")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return "", errors.Errorf("error: unexpected status code '%s' in response", response.StatusCode)
+	}
+
+	bodyBytes, err := io.ReadAll(response.Body)
+	if err != nil {
+		return "", errors.Wrap(err, "error: could not read response")
+	}
+	checkSums := string(bodyBytes)
+	return checkSums, nil
 }
 
 func (r *Release) ShaSumsURL() string {
-	releaseUrl := "https://releases.hashicorp.com/terraform"
-	return fmt.Sprintf("%s/%s/%s", releaseUrl, r.Version, r.Shasums)
+	return fmt.Sprintf("%s/%s/%s", releaseRootURL, r.Version, r.Shasums)
 }
 
-func (c *Client) downloadBuild(build Build) (string, []byte, error) {
+func (c *Client) downloadBuild(build Build, checkSha256Sum string) (string, error) {
 	path := cachedExecutablePath(c.cacheDir, build)
 
 	if _, err := os.Stat(path); err == nil {
 		log.Printf("found cached Terraform executable at %s", path)
-
-		return path, nil, nil
+		return path, nil
 	} else if !os.IsNotExist(err) {
-		return "", nil, errors.Wrap(err, "could not stat Terraform executable")
+		return "", errors.Wrap(err, "could not stat Terraform executable")
 	}
 
 	log.Printf("dowloading release archive from %s", build.URL)
 
-	zipFile, zipLength, err := c.downloadReleaseArchive(build.URL)
+	zipFile, zipLength, err := c.downloadReleaseArchive(build)
 	defer os.Remove(zipFile.Name())
 	defer zipFile.Close()
 
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
 
 	f, err := os.Open(zipFile.Name())
 	if err != nil {
-		return "", nil, errors.Wrap(err, "could not open zip archive")
+		return "", errors.Wrap(err, "could not open zip archive")
 	}
 	defer f.Close()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
-		return "", nil, errors.Wrap(err, "could not check sha256sum for zip archive")
+		return "", errors.Wrap(err, "could not check sha256sum for zip archive")
 	}
-
 	sha256Sum := h.Sum(nil)
+
+	if checkSha256Sum != "" {
+		if checkSha256Sum != hex.EncodeToString(sha256Sum) {
+			return "", errors.Errorf(
+				"checksum for %s should be %s, got %s", build.URL, checkSha256Sum, hex.EncodeToString(sha256Sum),
+			)
+		} else {
+			log.Printf("checksum match\n")
+		}
+	}
 
 	zipReader, err := zip.NewReader(zipFile, zipLength)
 
 	if err != nil {
-		return "", nil, errors.Wrap(err, "could not unzip release archive")
+		return "", errors.Wrap(err, "could not unzip release archive")
 	}
 
 	for _, f := range zipReader.File {
@@ -196,27 +205,27 @@ func (c *Client) downloadBuild(build Build) (string, []byte, error) {
 		source, err := f.Open()
 
 		if err != nil {
-			return "", nil, errors.Wrap(err, "could not read binary in release archive")
+			return "", errors.Wrap(err, "could not read binary in release archive")
 		}
 
 		defer source.Close()
 
 		if err := atomic.WriteFile(path, source); err != nil {
-			return "", nil, errors.Wrap(err, "could not write binary to the cache directory")
+			return "", errors.Wrap(err, "could not write binary to the cache directory")
 		}
 
 		if err := os.Chmod(path, 0700); err != nil {
-			return "", nil, errors.Wrap(err, "could not make binary executable")
+			return "", errors.Wrap(err, "could not make binary executable")
 		}
 
-		return path, sha256Sum, nil
+		return path, nil
 	}
 
-	return "", nil, errors.New("could not find executable named 'terraform' in release archive")
+	return "", errors.New("could not find executable named 'terraform' in release archive")
 }
 
-func (c *Client) downloadReleaseArchive(url string) (*os.File, int64, error) {
-	request, err := http.NewRequest("GET", url, nil)
+func (c *Client) downloadReleaseArchive(build Build) (*os.File, int64, error) {
+	request, err := http.NewRequest("GET", build.URL, nil)
 
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "could not create request for release archive")
@@ -236,7 +245,7 @@ func (c *Client) downloadReleaseArchive(url string) (*os.File, int64, error) {
 		return nil, 0, errors.Errorf("unexpected status code '%s' in response", response.StatusCode)
 	}
 
-	tmp, err := ioutil.TempFile("", filepath.Base(url))
+	tmp, err := ioutil.TempFile("", filepath.Base(build.URL))
 
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "could not create temporary file for release archive")
