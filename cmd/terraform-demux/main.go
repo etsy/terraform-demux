@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"runtime"
 
 	"github.com/etsy/terraform-demux/internal/wrapper"
 )
@@ -17,9 +18,15 @@ func main() {
 		log.SetOutput(ioutil.Discard)
 	}
 
-	log.Printf("terraform-demux version %s", version)
+	arch := os.Getenv("TF_DEMUX_ARCH")
 
-	exitCode, err := wrapper.RunTerraform(os.Args[1:])
+	if arch == "" {
+		arch = runtime.GOARCH
+	}
+
+	log.Printf("terraform-demux version %s, using arch '%s'", version, arch)
+
+	exitCode, err := wrapper.RunTerraform(os.Args[1:], arch)
 
 	if err != nil {
 		log.SetOutput(os.Stderr)
