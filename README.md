@@ -23,6 +23,16 @@ A seamless launcher for Terraform.
 
 Simply navigate to any folder that contains Terraform configuration and run `terraform` as you usually would. `terraform-demux` will attempt to locate the appropriate [version constraint](https://www.terraform.io/docs/language/expressions/version-constraints.html) by searching in the current working directory and recursively through parent directories. If `terraform-demux` cannot determine a constraint, it will default to the latest possible version.
 
+### Architecture Compatability
+
+`terraform-demux` supports a native `arm64` build that can also run `amd64` versions of `terraform` by specifying the `TF_DEMUX_ARCH` environment variable. This might be necessary for `terraform` workspaces that need older `terraform` versions that do not have `arm64` builds, or use older providers that do not have `arm64` builds.
+
+It is recommended to set up the following shell alias for handy `amd64` invocations:
+
+```sh
+alias terraform-amd64="TF_DEMUX_ARCH=amd64 terraform-demux"
+```
+
 ### Logging
 
 Setting the `TF_DEMUX_LOG` environment variable to any non-empty value will cause `terraform-demux` to write out debug logs to `stderr`.

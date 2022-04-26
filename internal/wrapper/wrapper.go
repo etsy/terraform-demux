@@ -18,7 +18,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func RunTerraform(args []string) (int, error) {
+func RunTerraform(args []string, arch string) (int, error) {
 	cacheDirectory, err := ensureCacheDirectory()
 
 	if err != nil {
@@ -53,7 +53,7 @@ func RunTerraform(args []string) (int, error) {
 
 	log.Printf("version '%s' matches all constraints", matchingRelease.Version)
 
-	executablePath, err := client.DownloadRelease(matchingRelease, runtime.GOOS, runtime.GOARCH)
+	executablePath, err := client.DownloadRelease(matchingRelease, runtime.GOOS, arch)
 
 	if err != nil {
 		return 1, err
