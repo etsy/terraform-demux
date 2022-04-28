@@ -197,8 +197,9 @@ func (c *Client) downloadBuild(build Build, checkSha256Sum string) (string, erro
 		return "", errors.Wrap(err, "could not unzip release archive")
 	}
 
+	binaryName := build.archiveBinaryName()
 	for _, f := range zipReader.File {
-		if filepath.Base(f.Name) != "terraform" {
+		if filepath.Base(f.Name) != binaryName {
 			continue
 		}
 
@@ -261,8 +262,20 @@ func cachedExecutablePath(cacheDir string, b Build) string {
 	return filepath.Join(cacheDir, b.executableName())
 }
 
+func (b *Build) archiveBinaryName() string {
+	extension := ""
+	if b.OS == "windows" {
+		extension = ".exe"
+	}
+	return "terraform" + extension
+}
+
 func (b *Build) executableName() string {
-	return fmt.Sprintf("terraform_%s_%s_%s", b.Version.String(), b.OS, b.Arch)
+	extension := ""
+	if b.OS == "windows" {
+		extension = ".exe"
+	}
+	return fmt.Sprintf("terraform_%s_%s_%s%s", b.Version.String(), b.OS, b.Arch, extension)
 }
 
 func (b *Build) zipFileName() string {
