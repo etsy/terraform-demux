@@ -1,7 +1,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"runtime"
@@ -15,7 +15,7 @@ var (
 
 func main() {
 	if os.Getenv("TF_DEMUX_LOG") == "" {
-		log.SetOutput(ioutil.Discard)
+		log.SetOutput(io.Discard)
 	}
 
 	arch := os.Getenv("TF_DEMUX_ARCH")
