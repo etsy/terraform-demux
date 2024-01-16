@@ -5,13 +5,13 @@
 class TerraformDemux < Formula
   desc "A user-friendly launcher (à la Bazelisk) for Terraform."
   homepage "https://github.com/etsy/terraform-demux"
-  version "1.1.1"
+  version "1.1.2"
   license "Apache-2.0"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/etsy/terraform-demux/releases/download/v1.1.1/terraform-demux_1.1.1_darwin_arm64.tar.gz"
-      sha256 "bac68916f3bc57775720c24e1892246fee8bc92cd1b72be4c744798438e5c4c5"
+      url "https://github.com/etsy/terraform-demux/releases/download/v1.1.2/terraform-demux_1.1.2_darwin_arm64.tar.gz"
+      sha256 "ef19f8d928a654b20e502d157313ee3694eb0af536d553231bea9e119fd9bb91"
 
       def install
         bin.install "terraform-demux"
@@ -19,8 +19,8 @@ class TerraformDemux < Formula
       end
     end
     if Hardware::CPU.intel?
-      url "https://github.com/etsy/terraform-demux/releases/download/v1.1.1/terraform-demux_1.1.1_darwin_amd64.tar.gz"
-      sha256 "bcb69b965679e7de9edf3266f45fe99ed451f8b789d97886ab63b1b35833cba3"
+      url "https://github.com/etsy/terraform-demux/releases/download/v1.1.2/terraform-demux_1.1.2_darwin_amd64.tar.gz"
+      sha256 "360ddf8b16eb498091fad37ad1aed6f078f74ee6eb01736332749a908da82f86"
 
       def install
         bin.install "terraform-demux"
@@ -31,8 +31,8 @@ class TerraformDemux < Formula
 
   on_linux do
     if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
-      url "https://github.com/etsy/terraform-demux/releases/download/v1.1.1/terraform-demux_1.1.1_linux_arm64.tar.gz"
-      sha256 "1e714646b462fa44d953afed20dafd4d2b5af16aa473fa63315b203d43c1a085"
+      url "https://github.com/etsy/terraform-demux/releases/download/v1.1.2/terraform-demux_1.1.2_linux_arm64.tar.gz"
+      sha256 "fa777ce183b2a57eea0216049cf69156a1e2252a6bd6e705ffeb56f14ed58f27"
 
       def install
         bin.install "terraform-demux"
@@ -40,8 +40,8 @@ class TerraformDemux < Formula
       end
     end
     if Hardware::CPU.intel?
-      url "https://github.com/etsy/terraform-demux/releases/download/v1.1.1/terraform-demux_1.1.1_linux_amd64.tar.gz"
-      sha256 "e684c53ce38f93d946be91ae7f88d9c2146a1c386cebcb1ef11c3389413597e8"
+      url "https://github.com/etsy/terraform-demux/releases/download/v1.1.2/terraform-demux_1.1.2_linux_amd64.tar.gz"
+      sha256 "450cda34cd0479aa9cc6f183541574df50956aaa6a51ab53c571398e9ee08383"
 
       def install
         bin.install "terraform-demux"
