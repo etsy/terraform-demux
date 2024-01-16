@@ -161,17 +161,20 @@ func (c *Client) downloadBuild(build Build, checkSha256Sum string) (string, erro
 	log.Printf("dowloading release archive from %s", build.URL)
 
 	zipFile, zipLength, err := c.downloadReleaseArchive(build)
-	defer os.Remove(zipFile.Name())
-	defer zipFile.Close()
 
 	if err != nil {
 		return "", err
 	}
 
+	defer os.Remove(zipFile.Name())
+	defer zipFile.Close()
+
 	f, err := os.Open(zipFile.Name())
+
 	if err != nil {
 		return "", errors.Wrap(err, "could not open zip archive")
 	}
+
 	defer f.Close()
 
 	h := sha256.New()
