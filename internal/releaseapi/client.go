@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -246,7 +245,7 @@ func (c *Client) downloadReleaseArchive(build Build) (*os.File, int64, error) {
 		return nil, 0, errors.Errorf("unexpected status code '%s' in response", response.StatusCode)
 	}
 
-	tmp, err := ioutil.TempFile("", filepath.Base(build.URL))
+	tmp, err := os.CreateTemp("", filepath.Base(build.URL))
 
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "could not create temporary file for release archive")
