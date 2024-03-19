@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"log"
 	"os"
@@ -26,6 +27,11 @@ func main() {
 
 	log.Printf("terraform-demux version %s, using arch '%s'", version, arch)
 
+	if err := checkStateCommand(os.Args); err != nil {
+		log.SetOutput(os.Stderr)
+		log.Fatal("error: ", err)
+	}
+
 	exitCode, err := wrapper.RunTerraform(os.Args[1:], arch)
 
 	if err != nil {
@@ -35,4 +41,20 @@ func main() {
 	}
 
 	os.Exit(exitCode)
+}
+
+func checkStateCommand(args []string) error {
+	if checkArgsExists(args, "state") && !checkArgsExists(args, "--force") {
+		return errors.New("--force flag is required for the 'state' command")
+	}
+	return nil
+}
+
+func checkArgsExists(args []string, cmd string) bool {
+	for _, arg := range args {
+		if arg == cmd {
+			return true
+		}
+	}
+	return false
 }
