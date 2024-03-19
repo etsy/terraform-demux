@@ -45,7 +45,7 @@ func main() {
 
 func checkStateCommand(args []string) error {
 	if checkArgsExists(args, "state") && !checkArgsExists(args, "--force") {
-		return errors.New("--force flag is required for the 'state' command")
+		return errors.New("--force flag is required for the 'state' command. Consider using Terraform configuration blocks (moved, import) instead")
 	}
 	return nil
 }
