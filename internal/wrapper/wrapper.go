@@ -53,13 +53,19 @@ func RunTerraform(args []string, arch string) (int, error) {
 
 	log.Printf("version '%s' matches all constraints", matchingRelease.Version)
 
+	newArgs, err := checkStateCommand(args, matchingRelease.Version)
+	if err != nil {
+		log.SetOutput(os.Stderr)
+		log.Fatal("error: ", err)
+	}
+
 	executablePath, err := client.DownloadRelease(matchingRelease, runtime.GOOS, arch)
 
 	if err != nil {
 		return 1, err
 	}
 
-	return runTerraform(executablePath, args)
+	return runTerraform(executablePath, newArgs)
 }
 
 func ensureCacheDirectory() (string, error) {

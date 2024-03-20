@@ -3,7 +3,7 @@ module github.com/etsy/terraform-demux
 go 1.21
 
 require (
-	github.com/Masterminds/semver/v3 v3.1.1
+	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20231204233900-a34142ec2a72
 	github.com/natefinch/atomic v1.0.1

@@ -71,7 +71,7 @@ func (c *Client) ListReleases() (ReleaseIndex, error) {
 	if err != nil {
 		return releaseIndex, errors.Wrap(err, "could not send request for Terraform release index")
 	} else if response.StatusCode != http.StatusOK {
-		return releaseIndex, errors.Errorf("error: unexpected status code '%s' in response", response.StatusCode)
+		return releaseIndex, errors.Errorf("error: unexpected status code '%d' in response", response.StatusCode)
 	}
 
 	if response.Header.Get(httpcache.XFromCache) != "" {
@@ -133,7 +133,7 @@ func (c *Client) getReleaseCheckSums(release Release) (string, error) {
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return "", errors.Errorf("error: unexpected status code '%s' in response", response.StatusCode)
+		return "", errors.Errorf("error: unexpected status code '%d' in response", response.StatusCode)
 	}
 
 	bodyBytes, err := io.ReadAll(response.Body)
@@ -245,7 +245,7 @@ func (c *Client) downloadReleaseArchive(build Build) (*os.File, int64, error) {
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		return nil, 0, errors.Errorf("unexpected status code '%s' in response", response.StatusCode)
+		return nil, 0, errors.Errorf("unexpected status code '%d' in response", response.StatusCode)
 	}
 
 	tmp, err := os.CreateTemp("", filepath.Base(build.URL))
