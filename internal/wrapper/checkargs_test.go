@@ -9,29 +9,29 @@ import (
 
 func TestCheckStateCommand(t *testing.T) {
 	t.Run("Valid state import command with --force flag on 1.5.0", func(t *testing.T) {
-		args := []string{"state", "import", "--force"}
+		args := []string{"import", "--force"}
 		version, _ := semver.NewVersion("1.5.0")
 		result, err := checkStateCommand(args, version)
-		if err != nil || !slices.Equal(result, []string{"state", "import"}) {
+		if err != nil || !slices.Equal(result, []string{"import"}) {
 			t.Errorf("Expected no error, got: %v, %v", err, result)
 		}
 	})
 
 	t.Run("Valid state import command without --force flag on 1.4.7", func(t *testing.T) {
-		args := []string{"state", "import"}
+		args := []string{"import"}
 		version, _ := semver.NewVersion("1.4.7")
 		result, err := checkStateCommand(args, version)
-		if err != nil || !slices.Equal(result, []string{"state", "import"}) {
+		if err != nil || !slices.Equal(result, []string{"import"}) {
 			t.Errorf("Expected no error, got: %v", err)
 		}
 	})
 
 	t.Run("Invalid state import command without --force flag on 1.5.0", func(t *testing.T) {
-		args := []string{"state", "import"}
+		args := []string{"import"}
 		version, _ := semver.NewVersion("1.6.0")
-		result, err := checkStateCommand(args, version)
+		_, err := checkStateCommand(args, version)
 		if err == nil {
-			t.Errorf("Expected error, got: %v, %v", err, result)
+			t.Errorf("Expected error, got: %v", err)
 		}
 	})
 
@@ -46,19 +46,15 @@ func TestCheckStateCommand(t *testing.T) {
 }
 
 func TestCheckArgsExists(t *testing.T) {
-	t.Run("Check 'state import --force' command", func(t *testing.T) {
-		args := []string{"state", "import", "--force"}
-		result := checkArgsExists(args, "state")
+	t.Run("Check 'import --force' command", func(t *testing.T) {
+		args := []string{"import", "--force"}
+		result := checkArgsExists(args, "import")
 		if result != 0 {
 			t.Errorf("Expected 0, got: %v", result)
 		}
-		result = checkArgsExists(args, "import")
+		result = checkArgsExists(args, "--force")
 		if result != 1 {
 			t.Errorf("Expected 1, got: %v", result)
-		}
-		result = checkArgsExists(args, "--force")
-		if result != 2 {
-			t.Errorf("Expected 2, got: %v", result)
 		}
 	})
 
