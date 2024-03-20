@@ -9,7 +9,7 @@ import (
 func checkStateCommand(args []string, version *semver.Version) ([]string, error) {
 	versionImport, _ := semver.NewConstraint(">= 1.5.0")
 	versionMoved, _ := semver.NewConstraint(">= 1.1.0")
-	versionImport.Check(version)
+
 	if checkArgsExists(args, "import") >= 0 &&
 		versionImport.Check(version) {
 		force_pos := checkArgsExists(args, "--force")
