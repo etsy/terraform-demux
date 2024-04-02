@@ -53,8 +53,7 @@ func RunTerraform(args []string, arch string) (int, error) {
 
 	log.Printf("version '%s' matches all constraints", matchingRelease.Version)
 
-	newArgs, err := checkStateCommand(args, matchingRelease.Version)
-	if err != nil {
+	if checkStateCommand(args, matchingRelease.Version) != nil {
 		log.SetOutput(os.Stderr)
 		log.Fatal("error: ", err)
 	}
@@ -65,7 +64,7 @@ func RunTerraform(args []string, arch string) (int, error) {
 		return 1, err
 	}
 
-	return runTerraform(executablePath, newArgs)
+	return runTerraform(executablePath, args)
 }
 
 func ensureCacheDirectory() (string, error) {

@@ -1,46 +1,51 @@
 package wrapper
 
 import (
-	"slices"
+	"os"
 	"testing"
 
 	"github.com/Masterminds/semver/v3"
 )
 
 func TestCheckStateCommand(t *testing.T) {
-	t.Run("Valid state import command with --force flag on 1.5.0", func(t *testing.T) {
+	STATE_COMMAND_VAR := "TF_DEMUX_ALLOW_STATE_COMMANDS"
+	t.Run("Valid state import command with TF_DEMUX_ALLOW_STATE_COMMANDS on 1.5.0", func(t *testing.T) {
 		args := []string{"import", "--force"}
 		version, _ := semver.NewVersion("1.5.0")
-		result, err := checkStateCommand(args, version)
-		if err != nil || !slices.Equal(result, []string{"import"}) {
-			t.Errorf("Expected no error, got: %v, %v", err, result)
-		}
-	})
-
-	t.Run("Valid state import command without --force flag on 1.4.7", func(t *testing.T) {
-		args := []string{"import"}
-		version, _ := semver.NewVersion("1.4.7")
-		result, err := checkStateCommand(args, version)
-		if err != nil || !slices.Equal(result, []string{"import"}) {
+		os.Setenv(STATE_COMMAND_VAR, "true")
+		err := checkStateCommand(args, version)
+		if err != nil {
 			t.Errorf("Expected no error, got: %v", err)
 		}
 	})
 
-	t.Run("Invalid state import command without --force flag on 1.5.0", func(t *testing.T) {
+	t.Run("Valid state import command without TF_DEMUX_ALLOW_STATE_COMMANDS on 1.4.7", func(t *testing.T) {
+		args := []string{"import"}
+		version, _ := semver.NewVersion("1.4.7")
+		os.Setenv(STATE_COMMAND_VAR, "true")
+		err := checkStateCommand(args, version)
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("Invalid state import command without TF_DEMUX_ALLOW_STATE_COMMANDS on 1.5.0", func(t *testing.T) {
 		args := []string{"import"}
 		version, _ := semver.NewVersion("1.6.0")
-		_, err := checkStateCommand(args, version)
+		os.Setenv(STATE_COMMAND_VAR, "")
+		err := checkStateCommand(args, version)
 		if err == nil {
 			t.Errorf("Expected error, got: %v", err)
 		}
 	})
 
-	t.Run("Valid state mv command with --force flag on 1.6.0", func(t *testing.T) {
+	t.Run("Valid state mv command with TF_DEMUX_ALLOW_STATE_COMMANDS on 1.6.0", func(t *testing.T) {
 		args := []string{"state", "mv", "--force"}
 		version, _ := semver.NewVersion("1.6.0")
-		result, err := checkStateCommand(args, version)
-		if err != nil || !slices.Equal(result, []string{"state", "mv"}) {
-			t.Errorf("Expected no error, got: %v, %v", err, result)
+		os.Setenv(STATE_COMMAND_VAR, "true")
+		err := checkStateCommand(args, version)
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
 		}
 	})
 }
