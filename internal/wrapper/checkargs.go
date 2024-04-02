@@ -1,7 +1,7 @@
 package wrapper
 
 import (
-	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -14,12 +14,16 @@ func checkStateCommand(args []string, version *semver.Version) error {
 	versionRemoved, _ := semver.NewConstraint(">= 1.7.0")
 	STATE_COMMAND_VAR := "TF_DEMUX_ALLOW_STATE_COMMANDS"
 
+	errorMsg := func(command string, suggestion string) error {
+		return fmt.Errorf("need to set %s=true for the '%s' command. Consider using Terraform configuration %s block instead", STATE_COMMAND_VAR, command, suggestion)
+	}
+
 	if checkArgsExists(args, "import") >= 0 &&
 		versionImport.Check(version) {
 		if allowStateCommand(STATE_COMMAND_VAR) {
 			return nil
 		} else {
-			return errors.New("need set TF_DEMUX_ALLOW_STATE_COMMANDS=true for the 'import' command. Consider using Terraform configuration import block instead")
+			return errorMsg("import", "import")
 		}
 	}
 
@@ -29,7 +33,7 @@ func checkStateCommand(args []string, version *semver.Version) error {
 		if allowStateCommand(STATE_COMMAND_VAR) {
 			return nil
 		} else {
-			return errors.New("need set TF_DEMUX_ALLOW_STATE_COMMANDS=true for the 'state mv' command. Consider using Terraform configuration moved block instead")
+			return errorMsg("state mv", "moved")
 		}
 	}
 
@@ -39,7 +43,7 @@ func checkStateCommand(args []string, version *semver.Version) error {
 		if allowStateCommand(STATE_COMMAND_VAR) {
 			return nil
 		} else {
-			return errors.New("need set TF_DEMUX_ALLOW_STATE_COMMANDS=true for the 'state rm' command. Consider using Terraform configuration removed block instead")
+			return errorMsg("state rm", "removed")
 		}
 	}
 
