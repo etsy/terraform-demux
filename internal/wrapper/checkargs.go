@@ -15,36 +15,28 @@ func checkStateCommand(args []string, version *semver.Version) error {
 	STATE_COMMAND_VAR := "TF_DEMUX_ALLOW_STATE_COMMANDS"
 
 	errorMsg := func(command string, suggestion string) error {
-		return fmt.Errorf("refusing to execute '%s' command - use a '%s' configuration block instead, or set %s=true.", command, suggestion, STATE_COMMAND_VAR)
+		return fmt.Errorf("refusing to execute '%s' command - use a '%s' configuration block instead, or set %s=true", command, suggestion, STATE_COMMAND_VAR)
+	}
+
+	if allowStateCommand(STATE_COMMAND_VAR) {
+		return nil
 	}
 
 	if checkArgsExists(args, "import") >= 0 &&
 		versionImport.Check(version) {
-		if allowStateCommand(STATE_COMMAND_VAR) {
-			return nil
-		} else {
-			return errorMsg("import", "import")
-		}
+		return errorMsg("import", "import")
 	}
 
 	if checkArgsExists(args, "state") >= 0 &&
 		checkArgsExists(args, "mv") >= 0 &&
 		versionMoved.Check(version) {
-		if allowStateCommand(STATE_COMMAND_VAR) {
-			return nil
-		} else {
-			return errorMsg("state mv", "moved")
-		}
+		return errorMsg("state mv", "moved")
 	}
 
 	if checkArgsExists(args, "state") >= 0 &&
 		checkArgsExists(args, "rm") >= 0 &&
 		versionRemoved.Check(version) {
-		if allowStateCommand(STATE_COMMAND_VAR) {
-			return nil
-		} else {
-			return errorMsg("state rm", "removed")
-		}
+		return errorMsg("state rm", "removed")
 	}
 
 	return nil
