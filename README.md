@@ -33,6 +33,20 @@ It is recommended to set up the following shell alias for handy `amd64` invocati
 alias terraform-amd64="TF_DEMUX_ARCH=amd64 terraform-demux"
 ```
 
+### Enhanced State Operations Control
+
+We highly encourage leveraging native Terraform refactoring blocks whenever feasible, provided your Terraform version supports them. In line with this, we've implemented stricter controls over state operations to enhance security and stability. It's important to note that state operations now require the `TF_DEMUX_ALLOW_STATE_COMMANDS` environment variable to be set for execution.
+
+Usage Details
+
+* For Terraform 1.1.0 and above: We recomment utilizing Terraform [moved](https://developer.hashicorp.com/terraform/language/modules/develop/refactoring) block instead `terraform state mv` command.
+
+* For Terraform 1.5.0 and above: We recomment utilizing Terraform [import](https://developer.hashicorp.com/terraform/language/import) block instead `terraform import` command.
+
+* For Terraform 1.7.0 and above:  We recomment utilizing Terraform [removed](https://developer.hashicorp.com/terraform/language/resources/syntax) block instead `terraform state rm` command.
+
+However, if necessary, you can still utilize the Terraform CLI to manipulate states. Before proceeding, ensure to set the environment variable `TF_DEMUX_ALLOW_STATE_COMMANDS=true` to confirm your intent.
+
 ### Logging
 
 Setting the `TF_DEMUX_LOG` environment variable to any non-empty value will cause `terraform-demux` to write out debug logs to `stderr`.
