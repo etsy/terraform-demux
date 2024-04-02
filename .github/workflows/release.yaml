@@ -18,7 +18,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: 1.21
 
@@ -26,7 +26,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v5
         with:
           version: latest
-          args: release --rm-dist
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -36,7 +36,7 @@ jobs:
         run: |
           export MESSAGE="chore: regenerate homebrew formula"
           export SHA=$(git rev-parse --verify origin/main:Formula/terraform-demux.rb)
-          export CONTENT=$(base64 -i dist/terraform-demux.rb)
+          export CONTENT=$(base64 -i dist/homebrew/Formula/terraform-demux.rb)
           gh api --method PUT /repos/:owner/:repo/contents/Formula/terraform-demux.rb \
             --field message="$MESSAGE" \
             --field content="$CONTENT" \
