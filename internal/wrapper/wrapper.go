@@ -53,10 +53,8 @@ func RunTerraform(args []string, arch string) (int, error) {
 
 	log.Printf("version '%s' matches all constraints", matchingRelease.Version)
 
-	err = checkStateCommand(args, matchingRelease.Version)
-	if err != nil {
-		log.SetOutput(os.Stderr)
-		log.Fatal("error: ", err)
+	if err := checkStateCommand(args, matchingRelease.Version); err != nil {
+		return 1, err
 	}
 
 	executablePath, err := client.DownloadRelease(matchingRelease, runtime.GOOS, arch)
