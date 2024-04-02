@@ -15,7 +15,7 @@ func checkStateCommand(args []string, version *semver.Version) error {
 	STATE_COMMAND_VAR := "TF_DEMUX_ALLOW_STATE_COMMANDS"
 
 	errorMsg := func(command string, suggestion string) error {
-		return fmt.Errorf("need to set %s=true for the '%s' command. Consider using Terraform configuration %s block instead", STATE_COMMAND_VAR, command, suggestion)
+		return fmt.Errorf("refusing to execute '%s' command - use a '%s' configuration block instead, or set %s=true.", command, suggestion, STATE_COMMAND_VAR)
 	}
 
 	if checkArgsExists(args, "import") >= 0 &&
