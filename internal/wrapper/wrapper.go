@@ -53,7 +53,8 @@ func RunTerraform(args []string, arch string) (int, error) {
 
 	log.Printf("version '%s' matches all constraints", matchingRelease.Version)
 
-	if checkStateCommand(args, matchingRelease.Version) != nil {
+	err = checkStateCommand(args, matchingRelease.Version)
+	if err != nil {
 		log.SetOutput(os.Stderr)
 		log.Fatal("error: ", err)
 	}
