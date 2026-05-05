@@ -15,71 +15,79 @@ import (
 	"testing"
 )
 
-// fakeReleaseServer serves a single Terraform "release" so we can exercise
-// the full ListReleases + DownloadRelease pipeline without hitting
-// releases.hashicorp.com. It returns the server, the zip's sha256, and the
-// raw zip bytes (useful for tampering tests).
-func fakeReleaseServer(t *testing.T, version string) (*httptest.Server, string, []byte) {
+// serveRelease stands up an httptest server that serves a single Terraform
+// release. Tests can pass their own zipBytes and shasumsBody to simulate
+// happy paths, corrupted archives, missing checksum entries, or messy
+// SHA256SUMS formats. The returned URL paths follow HashiCorp's layout:
+//
+//	GET /index.json
+//	GET /<version>/terraform_<v>_SHA256SUMS
+//	GET /<version>/terraform_<v>_<os>_<arch>.zip
+func serveRelease(t *testing.T, version string, zipBytes []byte, shasumsBody string) *httptest.Server {
 	t.Helper()
 
 	zipName := fmt.Sprintf("terraform_%s_%s_%s.zip", version, runtime.GOOS, runtime.GOARCH)
+	shasumsName := fmt.Sprintf("terraform_%s_SHA256SUMS", version)
+
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	mux.HandleFunc("/index.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"versions":{%q:{"version":%q,"shasums":%q,"builds":[{"version":%q,"os":%q,"arch":%q,"url":%q}]}}}`,
+			version, version, shasumsName, version, runtime.GOOS, runtime.GOARCH,
+			srv.URL+"/"+version+"/"+zipName)
+	})
+	mux.HandleFunc("/"+version+"/"+shasumsName, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte(shasumsBody))
+	})
+	mux.HandleFunc("/"+version+"/"+zipName, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/zip")
+		_, _ = w.Write(zipBytes)
+	})
+
+	return srv
+}
+
+// terraformZip builds a minimal zip whose only entry is the platform's
+// terraform binary, named appropriately for runtime.GOOS.
+func terraformZip(t *testing.T, payload string) []byte {
+	t.Helper()
 	binName := "terraform"
 	if runtime.GOOS == "windows" {
 		binName = "terraform.exe"
 	}
-
-	// Build a minimal zip containing a "terraform" binary.
-	var zipBuf bytes.Buffer
-	zw := zip.NewWriter(&zipBuf)
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
 	w, err := zw.Create(binName)
 	if err != nil {
 		t.Fatalf("zip create: %v", err)
 	}
-	if _, err := w.Write([]byte("#!/bin/sh\necho fake terraform " + version + "\n")); err != nil {
+	if _, err := w.Write([]byte(payload)); err != nil {
 		t.Fatalf("zip write: %v", err)
 	}
 	if err := zw.Close(); err != nil {
 		t.Fatalf("zip close: %v", err)
 	}
-	zipBytes := zipBuf.Bytes()
+	return buf.Bytes()
+}
 
+// shasumsLine returns the canonical "<sha>  <filename>\n" entry for a
+// single archive — what HashiCorp ships in SHA256SUMS files.
+func shasumsLine(zipBytes []byte, version string) string {
+	zipName := fmt.Sprintf("terraform_%s_%s_%s.zip", version, runtime.GOOS, runtime.GOARCH)
 	sum := sha256.Sum256(zipBytes)
-	hexSum := hex.EncodeToString(sum[:])
-	shasumsName := fmt.Sprintf("terraform_%s_SHA256SUMS", version)
-	shasumsBody := fmt.Sprintf("%s  %s\n", hexSum, zipName)
+	return fmt.Sprintf("%s  %s\n", hex.EncodeToString(sum[:]), zipName)
+}
 
-	mux := http.NewServeMux()
-	srv := httptest.NewServer(mux)
-
-	indexPath := "/index.json"
-	zipPath := fmt.Sprintf("/%s/%s", version, zipName)
-	shasumsPath := fmt.Sprintf("/%s/%s", version, shasumsName)
-
-	mux.HandleFunc(indexPath, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{
-  "versions": {
-    %q: {
-      "version": %q,
-      "shasums": %q,
-      "builds": [
-        {"version": %q, "os": %q, "arch": %q, "url": %q}
-      ]
-    }
-  }
-}`, version, version, shasumsName, version, runtime.GOOS, runtime.GOARCH, srv.URL+zipPath)
-	})
-	mux.HandleFunc(shasumsPath, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		_, _ = w.Write([]byte(shasumsBody))
-	})
-	mux.HandleFunc(zipPath, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/zip")
-		_, _ = w.Write(zipBytes)
-	})
-
-	t.Cleanup(srv.Close)
-	return srv, hexSum, zipBytes
+// fakeReleaseServer is the happy-path wrapper around serveRelease: it
+// produces a release where the SHA256SUMS file correctly signs the zip.
+func fakeReleaseServer(t *testing.T, version string) *httptest.Server {
+	t.Helper()
+	zipBytes := terraformZip(t, "#!/bin/sh\necho fake terraform "+version+"\n")
+	return serveRelease(t, version, zipBytes, shasumsLine(zipBytes, version))
 }
 
 func withTestURLs(t *testing.T, srvURL string) {
@@ -93,14 +101,22 @@ func withTestURLs(t *testing.T, srvURL string) {
 	})
 }
 
-func TestListReleases_ParsesIndex(t *testing.T) {
-	srv, _, _ := fakeReleaseServer(t, "1.5.0")
+// newTestClient is a small fixture: stand up the fake server, point the
+// package URLs at it, return a fresh Client backed by a temp cache.
+func newTestClient(t *testing.T, version string) (*Client, *httptest.Server) {
+	t.Helper()
+	srv := fakeReleaseServer(t, version)
 	withTestURLs(t, srv.URL)
-
 	c, err := NewClient(t.TempDir())
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
+	return c, srv
+}
+
+func TestListReleases_ParsesIndex(t *testing.T) {
+	c, _ := newTestClient(t, "1.5.0")
+
 	idx, err := c.ListReleases()
 	if err != nil {
 		t.Fatalf("ListReleases: %v", err)
@@ -118,7 +134,7 @@ func TestListReleases_ParsesIndex(t *testing.T) {
 }
 
 func TestDownloadRelease_WritesAndCachesBinary(t *testing.T) {
-	srv, _, _ := fakeReleaseServer(t, "1.5.0")
+	srv := fakeReleaseServer(t, "1.5.0")
 	withTestURLs(t, srv.URL)
 
 	cacheDir := t.TempDir()
@@ -161,48 +177,11 @@ func TestDownloadRelease_WritesAndCachesBinary(t *testing.T) {
 }
 
 func TestDownloadRelease_RejectsCorruptedArchive(t *testing.T) {
-	// Stand up a server where the zip body doesn't match the published
-	// SHA256SUMS — DownloadRelease must refuse it.
-	version := "1.5.0"
-	zipName := fmt.Sprintf("terraform_%s_%s_%s.zip", version, runtime.GOOS, runtime.GOARCH)
-	shasumsName := fmt.Sprintf("terraform_%s_SHA256SUMS", version)
-
-	// Pretend the zip has this checksum, but actually serve different bytes.
-	bogusSum := strings.Repeat("a", 64)
-	shasumsBody := fmt.Sprintf("%s  %s\n", bogusSum, zipName)
-
-	// Build a real-looking zip with arbitrary content.
-	var zipBuf bytes.Buffer
-	zw := zip.NewWriter(&zipBuf)
-	w, _ := zw.Create("terraform")
-	_, _ = w.Write([]byte("not the right bytes"))
-	_ = zw.Close()
-
-	mux := http.NewServeMux()
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	mux.HandleFunc("/index.json", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, `{
-  "versions": {
-    %q: {
-      "version": %q,
-      "shasums": %q,
-      "builds": [
-        {"version": %q, "os": %q, "arch": %q, "url": %q}
-      ]
-    }
-  }
-}`, version, version, shasumsName, version, runtime.GOOS, runtime.GOARCH,
-			srv.URL+"/"+version+"/"+zipName)
-	})
-	mux.HandleFunc("/"+version+"/"+shasumsName, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(shasumsBody))
-	})
-	mux.HandleFunc("/"+version+"/"+zipName, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write(zipBuf.Bytes())
-	})
-
+	// Server signs the zip with a checksum that doesn't match its bytes.
+	zipBytes := terraformZip(t, "not the right bytes")
+	zipName := fmt.Sprintf("terraform_1.5.0_%s_%s.zip", runtime.GOOS, runtime.GOARCH)
+	bogusBody := fmt.Sprintf("%s  %s\n", strings.Repeat("a", 64), zipName)
+	srv := serveRelease(t, "1.5.0", zipBytes, bogusBody)
 	withTestURLs(t, srv.URL)
 
 	c, err := NewClient(t.TempDir())
@@ -213,9 +192,8 @@ func TestDownloadRelease_RejectsCorruptedArchive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListReleases: %v", err)
 	}
-	rel := idx.Versions[version]
 
-	_, err = c.DownloadRelease(rel, runtime.GOOS, runtime.GOARCH)
+	_, err = c.DownloadRelease(idx.Versions["1.5.0"], runtime.GOOS, runtime.GOARCH)
 	if err == nil {
 		t.Fatal("expected checksum mismatch error, got nil")
 	}
@@ -225,60 +203,26 @@ func TestDownloadRelease_RejectsCorruptedArchive(t *testing.T) {
 }
 
 func TestDownloadRelease_NoBuildForOSArch(t *testing.T) {
-	srv, _, _ := fakeReleaseServer(t, "1.5.0")
-	withTestURLs(t, srv.URL)
-
-	c, err := NewClient(t.TempDir())
-	if err != nil {
-		t.Fatalf("NewClient: %v", err)
-	}
+	c, _ := newTestClient(t, "1.5.0")
 	idx, err := c.ListReleases()
 	if err != nil {
 		t.Fatalf("ListReleases: %v", err)
 	}
-	rel := idx.Versions["1.5.0"]
 
-	_, err = c.DownloadRelease(rel, "plan9", "mips")
+	_, err = c.DownloadRelease(idx.Versions["1.5.0"], "plan9", "mips")
 	if err == nil {
 		t.Fatal("expected error for unknown os/arch, got nil")
 	}
 }
 
-// TestDownloadRelease_FailsWhenSumNotInChecksumFile is a regression test for
-// C1: previously a missing entry in SHA256SUMS caused checkSha256Sum to stay
-// "" and the verification was silently skipped. Now the entire flow must
-// fail.
+// TestDownloadRelease_FailsWhenSumNotInChecksumFile is a regression test
+// for C1: previously a missing entry in SHA256SUMS caused the verification
+// to be silently skipped. Now the entire flow must fail.
 func TestDownloadRelease_FailsWhenSumNotInChecksumFile(t *testing.T) {
-	version := "1.5.0"
-	zipName := fmt.Sprintf("terraform_%s_%s_%s.zip", version, runtime.GOOS, runtime.GOARCH)
-	shasumsName := fmt.Sprintf("terraform_%s_SHA256SUMS", version)
-
-	// SHA256SUMS deliberately lists a different filename, so no entry
-	// matches our build's zip.
-	shasumsBody := fmt.Sprintf("%s  some_other_file.zip\n", strings.Repeat("a", 64))
-
-	var zipBuf bytes.Buffer
-	zw := zip.NewWriter(&zipBuf)
-	w, _ := zw.Create("terraform")
-	_, _ = w.Write([]byte("payload"))
-	_ = zw.Close()
-
-	mux := http.NewServeMux()
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	mux.HandleFunc("/index.json", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, `{"versions":{%q:{"version":%q,"shasums":%q,"builds":[{"version":%q,"os":%q,"arch":%q,"url":%q}]}}}`,
-			version, version, shasumsName, version, runtime.GOOS, runtime.GOARCH,
-			srv.URL+"/"+version+"/"+zipName)
-	})
-	mux.HandleFunc("/"+version+"/"+shasumsName, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(shasumsBody))
-	})
-	mux.HandleFunc("/"+version+"/"+zipName, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write(zipBuf.Bytes())
-	})
-
+	zipBytes := terraformZip(t, "payload")
+	// SHASUMS lists a different filename, so no entry matches our zip.
+	body := fmt.Sprintf("%s  some_other_file.zip\n", strings.Repeat("a", 64))
+	srv := serveRelease(t, "1.5.0", zipBytes, body)
 	withTestURLs(t, srv.URL)
 
 	c, err := NewClient(t.TempDir())
@@ -289,9 +233,8 @@ func TestDownloadRelease_FailsWhenSumNotInChecksumFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListReleases: %v", err)
 	}
-	rel := idx.Versions[version]
 
-	_, err = c.DownloadRelease(rel, runtime.GOOS, runtime.GOARCH)
+	_, err = c.DownloadRelease(idx.Versions["1.5.0"], runtime.GOOS, runtime.GOARCH)
 	if err == nil {
 		t.Fatal("expected error when SHA256SUMS has no matching entry, got nil")
 	}
@@ -305,50 +248,19 @@ func TestDownloadRelease_FailsWhenSumNotInChecksumFile(t *testing.T) {
 // panic the parser (the previous strings.Split(line, "  ") + checksum[1]
 // path would index past the end of the slice).
 func TestDownloadRelease_TolerantSHASUMSParse(t *testing.T) {
-	version := "1.5.0"
-	zipName := fmt.Sprintf("terraform_%s_%s_%s.zip", version, runtime.GOOS, runtime.GOARCH)
-	shasumsName := fmt.Sprintf("terraform_%s_SHA256SUMS", version)
-
-	binName := "terraform"
-	if runtime.GOOS == "windows" {
-		binName = "terraform.exe"
-	}
-	var zipBuf bytes.Buffer
-	zw := zip.NewWriter(&zipBuf)
-	w, _ := zw.Create(binName)
-	_, _ = w.Write([]byte("payload"))
-	_ = zw.Close()
-	zipBytes := zipBuf.Bytes()
+	zipBytes := terraformZip(t, "payload")
+	zipName := fmt.Sprintf("terraform_1.5.0_%s_%s.zip", runtime.GOOS, runtime.GOARCH)
 	sum := sha256.Sum256(zipBytes)
-	hexSum := hex.EncodeToString(sum[:])
-
-	// Mix in: blank lines, a malformed single-token line, extra whitespace,
-	// a legitimate line for our zip.
-	shasumsBody := strings.Join([]string{
+	body := strings.Join([]string{
 		"",
 		"   ",
 		"malformedline",
 		fmt.Sprintf("%s  some_other.zip", strings.Repeat("b", 64)),
-		fmt.Sprintf("%s  %s", hexSum, zipName),
+		fmt.Sprintf("%s  %s", hex.EncodeToString(sum[:]), zipName),
 		"",
 	}, "\n")
 
-	mux := http.NewServeMux()
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	mux.HandleFunc("/index.json", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, `{"versions":{%q:{"version":%q,"shasums":%q,"builds":[{"version":%q,"os":%q,"arch":%q,"url":%q}]}}}`,
-			version, version, shasumsName, version, runtime.GOOS, runtime.GOARCH,
-			srv.URL+"/"+version+"/"+zipName)
-	})
-	mux.HandleFunc("/"+version+"/"+shasumsName, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(shasumsBody))
-	})
-	mux.HandleFunc("/"+version+"/"+zipName, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write(zipBytes)
-	})
-
+	srv := serveRelease(t, "1.5.0", zipBytes, body)
 	withTestURLs(t, srv.URL)
 
 	c, err := NewClient(t.TempDir())
@@ -359,10 +271,8 @@ func TestDownloadRelease_TolerantSHASUMSParse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListReleases: %v", err)
 	}
-	rel := idx.Versions[version]
 
-	_, err = c.DownloadRelease(rel, runtime.GOOS, runtime.GOARCH)
-	if err != nil {
+	if _, err = c.DownloadRelease(idx.Versions["1.5.0"], runtime.GOOS, runtime.GOARCH); err != nil {
 		t.Fatalf("expected success despite messy SHA256SUMS, got: %v", err)
 	}
 }
@@ -371,13 +281,8 @@ func TestDownloadRelease_TolerantSHASUMSParse(t *testing.T) {
 // no "version" field on a Build (or it fails to decode), DownloadRelease
 // must not panic in executableName(). It falls back to Release.Version.
 func TestDownloadRelease_FallsBackToReleaseVersion(t *testing.T) {
-	srv, _, _ := fakeReleaseServer(t, "1.5.0")
-	withTestURLs(t, srv.URL)
+	c, _ := newTestClient(t, "1.5.0")
 
-	c, err := NewClient(t.TempDir())
-	if err != nil {
-		t.Fatalf("NewClient: %v", err)
-	}
 	idx, err := c.ListReleases()
 	if err != nil {
 		t.Fatalf("ListReleases: %v", err)
@@ -393,6 +298,27 @@ func TestDownloadRelease_FallsBackToReleaseVersion(t *testing.T) {
 	}
 	if !strings.Contains(path, "1.5.0") {
 		t.Errorf("expected path to include version, got: %s", path)
+	}
+}
+
+// TestListReleases_UsesLocalIndexTTL: a second ListReleases call within
+// the TTL window must not hit the network. We assert by closing the
+// upstream server and verifying the second call still succeeds.
+func TestListReleases_UsesLocalIndexTTL(t *testing.T) {
+	c, srv := newTestClient(t, "1.5.0")
+
+	if _, err := c.ListReleases(); err != nil {
+		t.Fatalf("first ListReleases: %v", err)
+	}
+	// Take server down — second call must succeed from local cache.
+	srv.Close()
+
+	idx, err := c.ListReleases()
+	if err != nil {
+		t.Fatalf("second ListReleases (server down): %v", err)
+	}
+	if _, ok := idx.Versions["1.5.0"]; !ok {
+		t.Errorf("expected cached index to contain 1.5.0")
 	}
 }
 

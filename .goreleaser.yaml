@@ -4,6 +4,10 @@ builds:
   - main: ./cmd/terraform-demux
     env:
       - CGO_ENABLED=0
+    # Inject the release tag into main.version so `terraform-demux -version`
+    # reports something other than the package default v0.0.1+dev.
+    ldflags:
+      - -s -w -X main.version=v{{.Version}}
     goos:
       - linux
       - windows

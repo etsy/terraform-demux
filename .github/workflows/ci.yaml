@@ -3,7 +3,29 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  check:
+  unit-tests:
+    name: unit (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.24'
+
+      - name: Unit tests
+        run: go test -race ./...
+
+  integration:
+    name: integration + goreleaser
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -14,10 +36,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: 1.21
-
-      - name: Unit tests
-        run: go test ./...
+          go-version: '1.24'
 
       - name: Integration tests
         run: ./test.sh

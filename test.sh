@@ -11,7 +11,10 @@ else
     # shellcheck disable=SC2064
     trap "rm -r $TMP_DIR" EXIT
 
-    export XDG_CACHE_HOME="$TMP_DIR"
+    # XDG_CACHE_HOME is ignored by os.UserCacheDir on macOS, so use the
+    # wrapper's explicit override env var to keep the integration suite
+    # from polluting the user's real cache.
+    export TF_DEMUX_CACHE_HOME="$TMP_DIR"
 fi
 
 function terraform_demux_version() {

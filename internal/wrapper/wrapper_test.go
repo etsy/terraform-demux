@@ -177,6 +177,71 @@ func TestGetTerraformVersionConstraints_SurfacesParseError(t *testing.T) {
 	}
 }
 
+// H-A regression: an unrelated parent directory with a broken .tf must
+// not block the wrapper from running in the (clean) child directory. We
+// only care about the user's actual cwd, not arbitrary ancestors.
+func TestGetTerraformVersionConstraints_TolerantOfParentParseErrors(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "terraform.tf"), []byte("totally broken {{{"), 0644); err != nil {
+		t.Fatalf("write parent tf: %v", err)
+	}
+	child := filepath.Join(root, "child")
+	if err := os.MkdirAll(child, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	constraints, err := getTerraformVersionConstraints(child)
+	if err != nil {
+		t.Fatalf("expected parent parse error to be tolerated, got: %v", err)
+	}
+	if constraints != nil {
+		t.Errorf("expected nil constraints, got %v", constraints)
+	}
+}
+
+func TestFilterDemuxEnv_StripsTFDemuxKeys(t *testing.T) {
+	in := []string{
+		"PATH=/usr/bin",
+		"TF_DEMUX_LOG=1",
+		"HOME=/tmp",
+		"TF_DEMUX_ALLOW_STATE_COMMANDS=true",
+		"TF_DEMUX_ARCH=amd64",
+		"TF_DEMUX_CACHE_HOME=/tmp/cache",
+		"USER=alice",
+	}
+	out := filterDemuxEnv(in)
+
+	want := map[string]bool{"PATH=/usr/bin": true, "HOME=/tmp": true, "USER=alice": true}
+	if len(out) != len(want) {
+		t.Fatalf("expected %d entries, got %d: %v", len(want), len(out), out)
+	}
+	for _, e := range out {
+		if !want[e] {
+			t.Errorf("unexpected entry %q in filtered env", e)
+		}
+	}
+}
+
+func TestEnsureCacheDirectory_HonorsOverrideEnv(t *testing.T) {
+	override := filepath.Join(t.TempDir(), "td-cache")
+	t.Setenv(cacheOverrideEnv, override)
+
+	got, err := ensureCacheDirectory()
+	if err != nil {
+		t.Fatalf("ensureCacheDirectory: %v", err)
+	}
+	if got != override {
+		t.Errorf("expected cache dir %q, got %q", override, got)
+	}
+	info, err := os.Stat(got)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if !info.IsDir() {
+		t.Errorf("override path %q is not a directory", got)
+	}
+}
+
 // H2 regression: a release with a nil Version (e.g., the upstream JSON
 // omits or fails to decode the "version" field) must be skipped, not
 // dereferenced.
