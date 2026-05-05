@@ -1,18 +1,17 @@
 package wrapper
 
 import (
-	"os"
 	"testing"
 
 	"github.com/Masterminds/semver/v3"
 )
 
 func TestCheckStateCommand(t *testing.T) {
-	STATE_COMMAND_VAR := "TF_DEMUX_ALLOW_STATE_COMMANDS"
+	const stateCommandVar = "TF_DEMUX_ALLOW_STATE_COMMANDS"
 	t.Run("Valid state import command with TF_DEMUX_ALLOW_STATE_COMMANDS on 1.5.0", func(t *testing.T) {
 		args := []string{"import", "--force"}
 		version, _ := semver.NewVersion("1.5.0")
-		os.Setenv(STATE_COMMAND_VAR, "true")
+		t.Setenv(stateCommandVar, "true")
 		err := checkStateCommand(args, version)
 		if err != nil {
 			t.Errorf("Expected no error, got: %v", err)
@@ -22,7 +21,7 @@ func TestCheckStateCommand(t *testing.T) {
 	t.Run("Valid state import command without TF_DEMUX_ALLOW_STATE_COMMANDS on 1.4.7", func(t *testing.T) {
 		args := []string{"import"}
 		version, _ := semver.NewVersion("1.4.7")
-		os.Setenv(STATE_COMMAND_VAR, "true")
+		t.Setenv(stateCommandVar, "true")
 		err := checkStateCommand(args, version)
 		if err != nil {
 			t.Errorf("Expected no error, got: %v", err)
@@ -32,7 +31,7 @@ func TestCheckStateCommand(t *testing.T) {
 	t.Run("Invalid state import command without TF_DEMUX_ALLOW_STATE_COMMANDS on 1.5.0", func(t *testing.T) {
 		args := []string{"import"}
 		version, _ := semver.NewVersion("1.6.0")
-		os.Setenv(STATE_COMMAND_VAR, "")
+		t.Setenv(stateCommandVar, "")
 		err := checkStateCommand(args, version)
 		if err == nil {
 			t.Errorf("Expected error, got: %v", err)
@@ -42,7 +41,7 @@ func TestCheckStateCommand(t *testing.T) {
 	t.Run("Valid state mv command with TF_DEMUX_ALLOW_STATE_COMMANDS on 1.6.0", func(t *testing.T) {
 		args := []string{"state", "mv", "--force"}
 		version, _ := semver.NewVersion("1.6.0")
-		os.Setenv(STATE_COMMAND_VAR, "true")
+		t.Setenv(stateCommandVar, "true")
 		err := checkStateCommand(args, version)
 		if err != nil {
 			t.Errorf("Expected no error, got: %v", err)

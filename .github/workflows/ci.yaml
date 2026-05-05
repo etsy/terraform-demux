@@ -16,9 +16,11 @@ jobs:
         with:
           go-version: 1.21
 
-      - name: Test
-        run: |
-          ./test.sh
+      - name: Unit tests
+        run: go test ./...
+
+      - name: Integration tests
+        run: ./test.sh
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v5
