@@ -7,7 +7,6 @@ require (
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20231204233900-a34142ec2a72
 	github.com/natefinch/atomic v1.0.1
-	github.com/pkg/errors v0.9.1
 )
 
 require (

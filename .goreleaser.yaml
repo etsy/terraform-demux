@@ -1,3 +1,5 @@
+version: 2
+
 builds:
   - main: ./cmd/terraform-demux
     env:
@@ -14,16 +16,15 @@ builds:
         goarch: arm64
 
 brews:
-  - tap:
+  - repository:
       owner: etsy
-      name:  terraform-demux
+      name: terraform-demux
 
-    folder:      Formula
-    skip_upload: true
+    directory: Formula
 
-    homepage:    https://github.com/etsy/terraform-demux
+    homepage: https://github.com/etsy/terraform-demux
     description: A user-friendly launcher (à la Bazelisk) for Terraform.
-    license:     "Apache-2.0"
+    license: "Apache-2.0"
 
     conflicts:
       - "terraform"
