@@ -23,7 +23,7 @@ A seamless launcher for Terraform.
 
 Simply navigate to any folder that contains Terraform configuration and run `terraform` as you usually would. `terraform-demux` will attempt to locate the appropriate [version constraint](https://www.terraform.io/docs/language/expressions/version-constraints.html) by searching in the current working directory and recursively through parent directories. If `terraform-demux` cannot determine a constraint, it will default to the latest possible version.
 
-### Architecture Compatability
+### Architecture Compatibility
 
 `terraform-demux` supports a native `arm64` build that can also run `amd64` versions of `terraform` by specifying the `TF_DEMUX_ARCH` environment variable. This might be necessary for `terraform` workspaces that need older `terraform` versions that do not have `arm64` builds, or use older providers that do not have `arm64` builds.
 
@@ -39,11 +39,11 @@ We highly encourage leveraging native Terraform refactoring blocks whenever feas
 
 Usage Details
 
-* For Terraform 1.1.0 and above: We recomment utilizing Terraform [moved](https://developer.hashicorp.com/terraform/language/modules/develop/refactoring) block instead `terraform state mv` command.
+* For Terraform 1.1.0 and above: we recommend using Terraform's [moved](https://developer.hashicorp.com/terraform/language/modules/develop/refactoring) block instead of the `terraform state mv` command.
 
-* For Terraform 1.5.0 and above: We recomment utilizing Terraform [import](https://developer.hashicorp.com/terraform/language/import) block instead `terraform import` command.
+* For Terraform 1.5.0 and above: we recommend using Terraform's [import](https://developer.hashicorp.com/terraform/language/import) block instead of the `terraform import` command.
 
-* For Terraform 1.7.0 and above:  We recomment utilizing Terraform [removed](https://developer.hashicorp.com/terraform/language/resources/syntax) block instead `terraform state rm` command.
+* For Terraform 1.7.0 and above: we recommend using Terraform's [removed](https://developer.hashicorp.com/terraform/language/resources/syntax) block instead of the `terraform state rm` command.
 
 However, if necessary, you can still utilize the Terraform CLI to manipulate states. Before proceeding, ensure to set the environment variable `TF_DEMUX_ALLOW_STATE_COMMANDS=true` to confirm your intent.
 
@@ -53,4 +53,6 @@ Setting the `TF_DEMUX_LOG` environment variable to any non-empty value will caus
 
 ## Cache Directory
 
-`terraform-demux` keeps a cache of Hashicorp's releases index and downloaded Terraform binaries in the directory returned by [os.UserCacheDir](https://golang.org/pkg/os/#UserCacheDir), under `terraform-demux/` (e.g. `~/Library/Caches/terraform-demux/` on MacOS).
+`terraform-demux` keeps a cache of HashiCorp's releases index and downloaded Terraform binaries in the directory returned by [os.UserCacheDir](https://golang.org/pkg/os/#UserCacheDir), under `terraform-demux/` (e.g. `~/Library/Caches/terraform-demux/` on macOS).
+
+Setting `TF_DEMUX_CACHE_HOME` overrides this location. This is useful for tests, sandboxes, and CI runners where you don't want the wrapper to touch the user's real cache (note that `XDG_CACHE_HOME` is ignored by `os.UserCacheDir` on macOS).
