@@ -19,6 +19,13 @@ brews:
   - repository:
       owner: etsy
       name: terraform-demux
+      # main branch protection requires verified signatures and PR review,
+      # so goreleaser cannot push the formula directly. Opening a PR lets
+      # GitHub sign the merge commit and satisfies branch protection.
+      pull_request:
+        enabled: true
+
+    commit_msg_template: "chore: regenerate homebrew formula"
 
     directory: Formula
 
