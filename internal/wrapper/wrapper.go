@@ -15,38 +15,35 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
-	"github.com/pkg/errors"
 )
 
 func RunTerraform(args []string, arch string) (int, error) {
 	cacheDirectory, err := ensureCacheDirectory()
-
 	if err != nil {
 		return 1, err
 	}
 
 	workingDirectory, err := os.Getwd()
-
 	if err != nil {
-		return 1, errors.Wrap(err, "could not get working directory")
+		return 1, fmt.Errorf("could not get working directory: %w", err)
 	}
 
 	terraformVersionConstraints, err := getTerraformVersionConstraints(workingDirectory)
-
 	if err != nil {
 		return 1, err
 	}
 
-	client := releaseapi.NewClient(cacheDirectory)
+	client, err := releaseapi.NewClient(cacheDirectory)
+	if err != nil {
+		return 1, err
+	}
 
 	releaseIndex, err := client.ListReleases()
-
 	if err != nil {
 		return 1, err
 	}
 
 	matchingRelease, err := filterReleases(releaseIndex, terraformVersionConstraints)
-
 	if err != nil {
 		return 1, err
 	}
@@ -58,7 +55,6 @@ func RunTerraform(args []string, arch string) (int, error) {
 	}
 
 	executablePath, err := client.DownloadRelease(matchingRelease, runtime.GOOS, arch)
-
 	if err != nil {
 		return 1, err
 	}
@@ -68,15 +64,13 @@ func RunTerraform(args []string, arch string) (int, error) {
 
 func ensureCacheDirectory() (string, error) {
 	userCacheDir, err := os.UserCacheDir()
-
 	if err != nil {
-		return "", errors.Wrap(err, "could not determine user's cache directory")
+		return "", fmt.Errorf("could not determine user's cache directory: %w", err)
 	}
 
 	wrapperCacheDir := filepath.Join(userCacheDir, "terraform-demux")
-
 	if err := os.MkdirAll(wrapperCacheDir, 0755); err != nil {
-		return "", errors.Wrapf(err, "could not create cache directory '%s'", wrapperCacheDir)
+		return "", fmt.Errorf("could not create cache directory %q: %w", wrapperCacheDir, err)
 	}
 
 	return wrapperCacheDir, nil
@@ -90,23 +84,26 @@ func getTerraformVersionConstraints(directory string) ([]*semver.Constraints, er
 
 		module, diags := tfconfig.LoadModule(currentDirectory)
 
+		// LoadModule returns success with an empty module when the directory
+		// has no .tf files, so HasErrors() means a real parse problem in
+		// something the user wrote — surface it instead of silently
+		// falling through to the latest stable release.
 		if diags.HasErrors() {
-			log.Printf("encountered error parsing configuration: %v", diags.Err())
-		} else if len(module.RequiredCore) > 0 {
+			return nil, fmt.Errorf("invalid terraform configuration in %s: %w", currentDirectory, diags.Err())
+		}
+
+		if len(module.RequiredCore) > 0 {
 			var allConstraints []*semver.Constraints
 
 			for _, constraintString := range module.RequiredCore {
 				constraints, err := semver.NewConstraint(constraintString)
-
 				if err != nil {
-					return nil, errors.Wrap(err, "could not determine constraint from string")
+					return nil, fmt.Errorf("could not parse required_version %q: %w", constraintString, err)
 				}
-
 				allConstraints = append(allConstraints, constraints)
 			}
 
 			log.Printf("found constraints: %v", allConstraints)
-
 			return allConstraints, nil
 		}
 
@@ -114,7 +111,6 @@ func getTerraformVersionConstraints(directory string) ([]*semver.Constraints, er
 
 		if parentDirectory == currentDirectory {
 			log.Printf("no constraints found")
-
 			return nil, nil
 		}
 
@@ -126,6 +122,11 @@ func filterReleases(index releaseapi.ReleaseIndex, constraints []*semver.Constra
 	var versions semver.Collection
 
 	for _, release := range index.Versions {
+		// Defensive: a release may decode without a Version (missing or
+		// unparseable field). Skip rather than panic on later access.
+		if release.Version == nil {
+			continue
+		}
 		if release.Version.Prerelease() != "" {
 			continue
 		}
@@ -143,38 +144,41 @@ ReleaseVersionLoop:
 			}
 		}
 
-		// this version matched all of the constraints, so we return early
 		return index.Versions[version.String()], nil
 	}
 
-	// no version matches all constraints
-	return releaseapi.Release{}, errors.Errorf(
-		"no Terraform releases appear to satisfy all of the following constraints: %v", constraints,
-	)
+	return releaseapi.Release{}, fmt.Errorf("no Terraform releases appear to satisfy all of the following constraints: %v", constraints)
 }
 
-// runTerraform executes Terraform and returns the exit code as an integer.
+// runTerraform executes Terraform and returns its exit code.
 // Based on https://github.com/bazelbuild/bazelisk/blob/97a0d60468dc696cea3cf1d252b526f1ac6a9090/core/core.go#L405.
 func runTerraform(executable string, args []string) (int, error) {
 	cmd := makeTerraformCmd(executable, args)
 
-	err := cmd.Start()
-
-	if err != nil {
-		return 1, errors.Errorf("could not start Terraform: %v", err)
+	if err := cmd.Start(); err != nil {
+		return 1, fmt.Errorf("could not start Terraform: %w", err)
 	}
 
-	c := make(chan os.Signal)
-
+	// Buffered so signal.Notify never drops a delivery.
+	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(c)
+
+	done := make(chan struct{})
+	defer close(done)
 
 	go func() {
-		s := <-c
-
-		if runtime.GOOS != "windows" {
-			cmd.Process.Signal(s)
-		} else {
-			cmd.Process.Kill()
+		for {
+			select {
+			case s := <-c:
+				if runtime.GOOS == "windows" {
+					_ = cmd.Process.Kill()
+				} else {
+					_ = cmd.Process.Signal(s)
+				}
+			case <-done:
+				return
+			}
 		}
 	}()
 
@@ -182,8 +186,7 @@ func runTerraform(executable string, args []string) (int, error) {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			return exitError.ExitCode(), nil
 		}
-
-		return 1, fmt.Errorf("error running Terraform: %v", err)
+		return 1, fmt.Errorf("error running Terraform: %w", err)
 	}
 
 	return 0, nil

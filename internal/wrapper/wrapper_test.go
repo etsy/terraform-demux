@@ -162,6 +162,39 @@ func TestGetTerraformVersionConstraints_NoneFound(t *testing.T) {
 	}
 }
 
+// H3 regression: a syntactically-broken terraform.tf must not be silently
+// swallowed and treated as "no constraint" (which would then resolve to the
+// latest stable Terraform). The error has to surface.
+func TestGetTerraformVersionConstraints_SurfacesParseError(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "terraform.tf"), []byte("this is not valid hcl {{{"), 0644); err != nil {
+		t.Fatalf("write tf: %v", err)
+	}
+
+	_, err := getTerraformVersionConstraints(dir)
+	if err == nil {
+		t.Fatal("expected parse error, got nil")
+	}
+}
+
+// H2 regression: a release with a nil Version (e.g., the upstream JSON
+// omits or fails to decode the "version" field) must be skipped, not
+// dereferenced.
+func TestFilterReleases_SkipsNilVersion(t *testing.T) {
+	idx := releaseapi.ReleaseIndex{Versions: map[string]releaseapi.Release{
+		"1.5.0": {Version: mustVersion(t, "1.5.0")},
+		"bogus": {Version: nil},
+	}}
+
+	got, err := filterReleases(idx, []*semver.Constraints{mustConstraint(t, ">= 1.0.0")})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Version.String() != "1.5.0" {
+		t.Errorf("expected 1.5.0, got %s", got.Version)
+	}
+}
+
 // TestRunTerraform_ExitCodePropagation regression-tests C3: the wrapper must
 // return the same exit code as the wrapped binary on every supported
 // platform. The previous syscall.WaitStatus type assertion was not portable

@@ -8,56 +8,61 @@ import (
 	"github.com/Masterminds/semver/v3"
 )
 
+const stateCommandVar = "TF_DEMUX_ALLOW_STATE_COMMANDS"
+
 func checkStateCommand(args []string, version *semver.Version) error {
-	versionImport, _ := semver.NewConstraint(">= 1.5.0")
-	versionMoved, _ := semver.NewConstraint(">= 1.1.0")
-	versionRemoved, _ := semver.NewConstraint(">= 1.7.0")
-	STATE_COMMAND_VAR := "TF_DEMUX_ALLOW_STATE_COMMANDS"
-
-	errorMsg := func(command string, suggestion string) error {
-		return fmt.Errorf("refusing to execute '%s' command - use a '%s' configuration block instead, or set %s=true", command, suggestion, STATE_COMMAND_VAR)
-	}
-
-	if allowStateCommand(STATE_COMMAND_VAR) {
+	if allowStateCommand(stateCommandVar) {
 		return nil
 	}
 
-	if checkArgsExists(args, "import") >= 0 &&
-		versionImport.Check(version) {
-		return errorMsg("import", "import")
-	}
+	versionImport, _ := semver.NewConstraint(">= 1.5.0")
+	versionMoved, _ := semver.NewConstraint(">= 1.1.0")
+	versionRemoved, _ := semver.NewConstraint(">= 1.7.0")
 
-	if checkArgsExists(args, "state") >= 0 &&
-		checkArgsExists(args, "mv") >= 0 &&
-		versionMoved.Check(version) {
-		return errorMsg("state mv", "moved")
-	}
+	cmd, sub := terraformSubcommand(args)
 
-	if checkArgsExists(args, "state") >= 0 &&
-		checkArgsExists(args, "rm") >= 0 &&
-		versionRemoved.Check(version) {
-		return errorMsg("state rm", "removed")
+	switch {
+	case cmd == "import" && versionImport.Check(version):
+		return refuseStateCommand("import", "import")
+	case cmd == "state" && sub == "mv" && versionMoved.Check(version):
+		return refuseStateCommand("state mv", "moved")
+	case cmd == "state" && sub == "rm" && versionRemoved.Check(version):
+		return refuseStateCommand("state rm", "removed")
 	}
-
 	return nil
 }
 
-func checkArgsExists(args []string, cmd string) int {
-	for i, arg := range args {
-		if arg == cmd {
-			return i
+// terraformSubcommand returns the first and second positional arguments,
+// ignoring anything that looks like a flag. This avoids false positives where
+// a flag value contains a literal like "import" or "mv" (e.g. -var=action=mv).
+// It does not handle the rare "-flag value" form, but Terraform's CLI almost
+// universally uses "-flag=value".
+func terraformSubcommand(args []string) (cmd, sub string) {
+	var positional []string
+	for _, a := range args {
+		if strings.HasPrefix(a, "-") {
+			continue
 		}
+		positional = append(positional, a)
 	}
-	return -1
+	if len(positional) > 0 {
+		cmd = positional[0]
+	}
+	if len(positional) > 1 {
+		sub = positional[1]
+	}
+	return
+}
+
+func refuseStateCommand(cmd, suggestion string) error {
+	return fmt.Errorf("refusing to execute '%s' command - use a '%s' configuration block instead, or set %s=true", cmd, suggestion, stateCommandVar)
 }
 
 func allowStateCommand(envVarName string) bool {
-	validValues := []string{"1", "true", "yes"}
 	value := strings.ToLower(os.Getenv(envVarName))
-	for _, valid := range validValues {
-		if value == valid {
-			return true
-		}
+	switch value {
+	case "1", "true", "yes":
+		return true
 	}
 	return false
 }
