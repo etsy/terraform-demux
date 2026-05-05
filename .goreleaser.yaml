@@ -19,6 +19,15 @@ brews:
   - repository:
       owner: etsy
       name: terraform-demux
+      branch: main
+      # Push the formula update over SSH using a deploy key, so the
+      # commit is attributed to a Rulesets bypass actor (Deploy keys)
+      # and is not blocked by branch protection on main.
+      git:
+        url: 'git@github.com:etsy/terraform-demux.git'
+        private_key: '{{ .Env.RELEASE_DEPLOY_KEY }}'
+
+    commit_msg_template: "chore: regenerate homebrew formula"
 
     directory: Formula
 
