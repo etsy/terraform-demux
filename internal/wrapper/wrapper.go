@@ -180,7 +180,7 @@ func runTerraform(executable string, args []string) (int, error) {
 
 	if err := cmd.Wait(); err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
-			return exitError.Sys().(syscall.WaitStatus).ExitStatus(), nil
+			return exitError.ExitCode(), nil
 		}
 
 		return 1, fmt.Errorf("error running Terraform: %v", err)

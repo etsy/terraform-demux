@@ -20,7 +20,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
+// These are var rather than const so tests can override them to point at an
+// httptest server.
+var (
 	releasesURL    = "https://releases.hashicorp.com/terraform/index.json"
 	releaseRootURL = "https://releases.hashicorp.com/terraform"
 )
