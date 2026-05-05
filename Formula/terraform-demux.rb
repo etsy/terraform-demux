@@ -5,13 +5,13 @@
 class TerraformDemux < Formula
   desc "A user-friendly launcher (à la Bazelisk) for Terraform."
   homepage "https://github.com/etsy/terraform-demux"
-  version "2.1.2"
+  version "2.1.3"
   license "Apache-2.0"
 
   on_macos do
     if Hardware::CPU.intel?
-      url "https://github.com/etsy/terraform-demux/releases/download/v2.1.2/terraform-demux_2.1.2_darwin_amd64.tar.gz"
-      sha256 "1ef8677ae087d0a3c03f7bef790ae4efbd69fe5eb18b7d6956a9d37bf68378b4"
+      url "https://github.com/etsy/terraform-demux/releases/download/v2.1.3/terraform-demux_2.1.3_darwin_amd64.tar.gz"
+      sha256 "e0ef87aab6182e86ce8df4580efab6c459a1c4a33ed3b24df6ed8c5bc08db8d3"
 
       define_method(:install) do
         bin.install "terraform-demux"
@@ -19,8 +19,8 @@ class TerraformDemux < Formula
       end
     end
     if Hardware::CPU.arm?
-      url "https://github.com/etsy/terraform-demux/releases/download/v2.1.2/terraform-demux_2.1.2_darwin_arm64.tar.gz"
-      sha256 "3190143b1e407abe6f35238a9a30a9129dd1e54085f4d597999d1576b277bedd"
+      url "https://github.com/etsy/terraform-demux/releases/download/v2.1.3/terraform-demux_2.1.3_darwin_arm64.tar.gz"
+      sha256 "fe498db08f1955e651c272b7f904ebb4ae661eabeb80f7eda5c509c52aaa2280"
 
       define_method(:install) do
         bin.install "terraform-demux"
@@ -31,16 +31,16 @@ class TerraformDemux < Formula
 
   on_linux do
     if Hardware::CPU.intel? && Hardware::CPU.is_64_bit?
-      url "https://github.com/etsy/terraform-demux/releases/download/v2.1.2/terraform-demux_2.1.2_linux_amd64.tar.gz"
-      sha256 "f0915c5558b6de52bb39d8d3537ba153bd584184614f15e5d0d96e893330b4a2"
+      url "https://github.com/etsy/terraform-demux/releases/download/v2.1.3/terraform-demux_2.1.3_linux_amd64.tar.gz"
+      sha256 "6a430c11a17028190e0d9d210b4413806fefa2ce75656ecd211a123f60d7d6b4"
       define_method(:install) do
         bin.install "terraform-demux"
         bin.install_symlink bin/"terraform-demux" => "terraform"
       end
     end
     if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
-      url "https://github.com/etsy/terraform-demux/releases/download/v2.1.2/terraform-demux_2.1.2_linux_arm64.tar.gz"
-      sha256 "7eb9d30d54ad1c69c5ddb82ac9d41fe34ad87f44203ce9fdac9be5c2e5f5afa3"
+      url "https://github.com/etsy/terraform-demux/releases/download/v2.1.3/terraform-demux_2.1.3_linux_arm64.tar.gz"
+      sha256 "64f8a42e6ba22328da19d27e140b0d7f30ec8339acb8ed045033cc964e55bbf6"
       define_method(:install) do
         bin.install "terraform-demux"
         bin.install_symlink bin/"terraform-demux" => "terraform"
