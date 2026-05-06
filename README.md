@@ -1,58 +1,104 @@
 # terraform-demux
 
-A seamless launcher for Terraform.
+A drop-in `terraform` that picks the right Terraform version for every project — automatically.
+
+[![CI](https://github.com/etsy/terraform-demux/actions/workflows/ci.yaml/badge.svg)](https://github.com/etsy/terraform-demux/actions/workflows/ci.yaml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/etsy/terraform-demux)](https://goreportcard.com/report/github.com/etsy/terraform-demux)
+[![Latest release](https://img.shields.io/github/v/release/etsy/terraform-demux)](https://github.com/etsy/terraform-demux/releases/latest)
+[![Go Reference](https://pkg.go.dev/badge/github.com/etsy/terraform-demux.svg)](https://pkg.go.dev/github.com/etsy/terraform-demux)
+[![License: Apache-2.0](https://img.shields.io/github/license/etsy/terraform-demux)](LICENSE)
 
 ![demo of running `terraform-demux` with different `required_version` constraints](https://user-images.githubusercontent.com/1906605/117176639-15f8d880-ad9e-11eb-9e0d-65c0bd0ce8f9.gif)
 
+## Why terraform-demux?
 
-## Installation
+Switching Terraform versions between projects is annoying. `tfenv install`, `tfswitch`, asdf shims — they all need maintenance, and you still forget to run them. `terraform-demux` reads each project's `required_version` constraint, downloads the matching Terraform release, verifies its SHA-256 against HashiCorp's published `SHA256SUMS`, caches it, and execs it — so a single `terraform` command Just Works in every project.
 
-### Homebrew
+No per-version installs. No shims. No surprises.
 
-**Note:** installing `terraform-demux` via Homebrew will automatically create a symlink named `terraform`.
+## Features
 
-1. `brew tap etsy/terraform-demux https://github.com/etsy/terraform-demux`
-2. `brew install terraform-demux`
+- **Zero-config** — reads `required_version` from your `terraform { ... }` block, walking parent directories until it finds one
+- **Drop-in** — installs a `terraform` symlink, so existing scripts, CI, and IDE plugins keep working
+- **Verified downloads** — every archive is checked against HashiCorp's published `SHA256SUMS` before it's cached or executed
+- **Concurrency-safe cache** — per-binary `flock` keeps parallel invocations from re-downloading the same release
+- **Apple Silicon friendly** — `TF_DEMUX_ARCH=amd64` lets you run older Terraform releases that have no `arm64` build
+- **Safer state operations** — refuses `terraform import`, `state mv`, and `state rm` on Terraform versions that have config-block alternatives ([`import`](https://developer.hashicorp.com/terraform/language/import), [`moved`](https://developer.hashicorp.com/terraform/language/modules/develop/refactoring), [`removed`](https://developer.hashicorp.com/terraform/language/resources/syntax)); opt back in with one env var when you need to
+- **Cross-platform** — Linux, macOS, and Windows on `amd64` and `arm64` (no `windows/arm64`)
+
+## Quick start
+
+### Homebrew (recommended)
+
+```sh
+brew tap etsy/terraform-demux https://github.com/etsy/terraform-demux
+brew install terraform-demux
+```
+
+The formula installs the binary as `terraform-demux` and creates a `terraform` symlink, so you can keep typing `terraform` everywhere.
+
+```sh
+terraform -version
+```
 
 ### Manual
 
-1. Grab the latest binary from the [releases page](https://github.com/etsy/terraform-demux/releases)
-2. Copy it to a location in your `$PATH` as `terraform` (or leave it as `terraform-demux` if you'd like)
+1. Grab the binary for your platform from the [latest release](https://github.com/etsy/terraform-demux/releases/latest).
+2. Drop it into a directory on your `$PATH`. Either keep it as `terraform-demux`, or rename/symlink it to `terraform` if you want it to be invoked as the default.
 
-## Usage
+## How does it compare?
 
-Simply navigate to any folder that contains Terraform configuration and run `terraform` as you usually would. `terraform-demux` will attempt to locate the appropriate [version constraint](https://www.terraform.io/docs/language/expressions/version-constraints.html) by searching in the current working directory and recursively through parent directories. If `terraform-demux` cannot determine a constraint, it will default to the latest possible version.
+| | reads `required_version` directly | drop-in `terraform` (no shim) | auto-installs new versions on first use |
+| --- | :-: | :-: | :-: |
+| **terraform-demux** | ✅ | ✅ | ✅ |
+| [tfenv](https://github.com/tfutils/tfenv) | partial (via `tfenv use min-required`) | shim wrapper | ❌ (`tfenv install <ver>` first) |
+| [tfswitch](https://github.com/warrensbox/terraform-switcher) | ✅ | ❌ (manages a symlink you switch) | ✅ (interactive) |
 
-### Architecture Compatibility
+`terraform-demux`'s niche: you never run a `demux` subcommand or remember to install a version. You just run `terraform`.
 
-`terraform-demux` supports a native `arm64` build that can also run `amd64` versions of `terraform` by specifying the `TF_DEMUX_ARCH` environment variable. This might be necessary for `terraform` workspaces that need older `terraform` versions that do not have `arm64` builds, or use older providers that do not have `arm64` builds.
+## Configuration
 
-It is recommended to set up the following shell alias for handy `amd64` invocations:
+| Env var | Purpose |
+| --- | --- |
+| `TF_DEMUX_LOG` | Any non-empty value enables verbose logging to stderr. By default logs are buffered and only printed if something goes wrong. |
+| `TF_DEMUX_ARCH` | Override the architecture used to pick a Terraform binary. Common case: `TF_DEMUX_ARCH=amd64` on Apple Silicon for older Terraform releases that have no native `arm64` build. |
+| `TF_DEMUX_ALLOW_STATE_COMMANDS` | `1`, `true`, or `yes` bypasses the state-command guard described below. |
+| `TF_DEMUX_CACHE_HOME` | Override the cache directory (otherwise `os.UserCacheDir()/terraform-demux/`). Useful for sandboxes and CI; also handy on macOS, where `XDG_CACHE_HOME` is ignored by `os.UserCacheDir`. |
+
+Suggested shell alias for `amd64` invocations on Apple Silicon:
 
 ```sh
-alias terraform-amd64="TF_DEMUX_ARCH=amd64 terraform-demux"
+alias terraform-amd64="TF_DEMUX_ARCH=amd64 terraform"
 ```
 
-### Enhanced State Operations Control
+`TF_DEMUX_*` variables are stripped from the environment passed to the child Terraform process, so wrapper-internal config can't accidentally leak into providers or nested invocations.
 
-We highly encourage leveraging native Terraform refactoring blocks whenever feasible, provided your Terraform version supports them. In line with this, we've implemented stricter controls over state operations to enhance security and stability. It's important to note that state operations now require the `TF_DEMUX_ALLOW_STATE_COMMANDS` environment variable to be set for execution.
+## State-command guard
 
-Usage Details
+Native Terraform refactoring blocks are safer and reviewable in code, so `terraform-demux` refuses these CLI commands by default on the Terraform versions where a block alternative exists:
 
-* For Terraform 1.1.0 and above: we recommend using Terraform's [moved](https://developer.hashicorp.com/terraform/language/modules/develop/refactoring) block instead of the `terraform state mv` command.
+- `terraform import` — refused on Terraform `>= 1.5.0` (use the [`import`](https://developer.hashicorp.com/terraform/language/import) block).
+- `terraform state mv` — refused on Terraform `>= 1.1.0` (use the [`moved`](https://developer.hashicorp.com/terraform/language/modules/develop/refactoring) block).
+- `terraform state rm` — refused on Terraform `>= 1.7.0` (use the [`removed`](https://developer.hashicorp.com/terraform/language/resources/syntax) block).
 
-* For Terraform 1.5.0 and above: we recommend using Terraform's [import](https://developer.hashicorp.com/terraform/language/import) block instead of the `terraform import` command.
+When you really do need to run one of them, set the override:
 
-* For Terraform 1.7.0 and above: we recommend using Terraform's [removed](https://developer.hashicorp.com/terraform/language/resources/syntax) block instead of the `terraform state rm` command.
+```sh
+TF_DEMUX_ALLOW_STATE_COMMANDS=true terraform state mv ...
+```
 
-However, if necessary, you can still utilize the Terraform CLI to manipulate states. Before proceeding, ensure to set the environment variable `TF_DEMUX_ALLOW_STATE_COMMANDS=true` to confirm your intent.
+The guard matches positional Terraform subcommands only, so flag values like `-var=action=import` won't trigger it.
 
-### Logging
+## Cache directory
 
-Setting the `TF_DEMUX_LOG` environment variable to any non-empty value will cause `terraform-demux` to write out debug logs to `stderr`.
+`terraform-demux` caches HashiCorp's release index and downloaded Terraform binaries under `os.UserCacheDir()/terraform-demux/` (e.g. `~/Library/Caches/terraform-demux/` on macOS), split into `http/` and `bin/` subdirectories. Each binary is checksum-verified before it lands in `bin/`.
 
-## Cache Directory
+Set `TF_DEMUX_CACHE_HOME` to point the cache somewhere else.
 
-`terraform-demux` keeps a cache of HashiCorp's releases index and downloaded Terraform binaries in the directory returned by [os.UserCacheDir](https://golang.org/pkg/os/#UserCacheDir), under `terraform-demux/` (e.g. `~/Library/Caches/terraform-demux/` on macOS).
+## Contributing
 
-Setting `TF_DEMUX_CACHE_HOME` overrides this location. This is useful for tests, sandboxes, and CI runners where you don't want the wrapper to touch the user's real cache (note that `XDG_CACHE_HOME` is ignored by `os.UserCacheDir` on macOS).
+PRs and issues welcome. Run `go test ./...` for the unit tests; `./test.sh` exercises the end-to-end flow against the fixtures in `testdata/`. CI runs on Linux, macOS, and Windows on every push.
+
+## License
+
+Apache-2.0 — see [LICENSE](LICENSE).
