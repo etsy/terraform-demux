@@ -57,8 +57,11 @@ runs:
         version="${tag#v}"
 
         archive="terraform-demux_${version}_${os}_${arch}.tar.gz"
-        tmp="$RUNNER_TEMP/terraform-demux-download"
-        dest="$RUNNER_TEMP/terraform-demux-bin"
+        # Use POSIX-style paths on Windows: Git Bash's tar misparses `D:\...` paths.
+        temp="$RUNNER_TEMP"
+        if [ "$RUNNER_OS" = "Windows" ]; then temp="$(cygpath -u "$RUNNER_TEMP")"; fi
+        tmp="$temp/terraform-demux-download"
+        dest="$temp/terraform-demux-bin"
         rm -rf "$tmp" "$dest"
         mkdir -p "$tmp" "$dest"
 
@@ -81,11 +84,7 @@ runs:
           exit 1
         fi
 
-        # GNU tar on Windows treats `D:\...` as a remote host:path without --force-local.
-        tar_opts=""
-        if [ "$RUNNER_OS" = "Windows" ]; then tar_opts="--force-local"; fi
-        # shellcheck disable=SC2086
-        tar $tar_opts -xzf "$tmp/$archive" -C "$dest" "$exe"
+        tar -xzf "$tmp/$archive" -C "$dest" "$exe"
         chmod +x "$dest/$exe"
 
         if [ "$INSTALL_AS_TERRAFORM" = "true" ]; then
@@ -96,5 +95,8 @@ runs:
           fi
         fi
 
-        echo "$dest" >> "$GITHUB_PATH"
+        # GITHUB_PATH needs a native path on Windows.
+        path_entry="$dest"
+        if [ "$RUNNER_OS" = "Windows" ]; then path_entry="$(cygpath -w "$dest")"; fi
+        echo "$path_entry" >> "$GITHUB_PATH"
         echo "version=$tag" >> "$GITHUB_OUTPUT"
