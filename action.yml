@@ -1,0 +1,96 @@
+name: Setup terraform-demux
+description: >-
+  Install terraform-demux and expose it on PATH as `terraform`, so each
+  Terraform module is run with a version satisfying its `required_version`.
+branding:
+  icon: terminal
+  color: purple
+
+inputs:
+  version:
+    description: terraform-demux release to install, e.g. `v2.1.3`. Defaults to the latest release.
+    required: false
+    default: latest
+  install-as-terraform:
+    description: Also install the binary as `terraform` (a symlink, or a copy on Windows).
+    required: false
+    default: 'true'
+
+outputs:
+  version:
+    description: The terraform-demux version that was installed.
+    value: ${{ steps.install.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install terraform-demux
+      id: install
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        INSTALL_AS_TERRAFORM: ${{ inputs.install-as-terraform }}
+      run: |
+        set -euo pipefail
+
+        repo="https://github.com/etsy/terraform-demux"
+
+        case "$RUNNER_OS" in
+          Linux)   os=linux;   exe=terraform-demux ;;
+          macOS)   os=darwin;  exe=terraform-demux ;;
+          Windows) os=windows; exe=terraform-demux.exe ;;
+          *) echo "::error::Unsupported runner OS: $RUNNER_OS"; exit 1 ;;
+        esac
+        case "$RUNNER_ARCH" in
+          X64)   arch=amd64 ;;
+          ARM64) arch=arm64 ;;
+          *) echo "::error::Unsupported runner architecture: $RUNNER_ARCH"; exit 1 ;;
+        esac
+
+        tag="$INPUT_VERSION"
+        if [ "$tag" = "latest" ]; then
+          # Follow the /releases/latest redirect rather than the API to avoid rate limits.
+          tag="$(curl -fsSL -o /dev/null -w '%{url_effective}' "$repo/releases/latest")"
+          tag="${tag##*/}"
+        fi
+        case "$tag" in v*) ;; *) tag="v$tag" ;; esac
+        version="${tag#v}"
+
+        archive="terraform-demux_${version}_${os}_${arch}.tar.gz"
+        tmp="$RUNNER_TEMP/terraform-demux-download"
+        dest="$RUNNER_TEMP/terraform-demux-bin"
+        rm -rf "$tmp" "$dest"
+        mkdir -p "$tmp" "$dest"
+
+        echo "Installing terraform-demux $tag ($os/$arch)"
+        curl -fsSL --retry 3 -o "$tmp/$archive" "$repo/releases/download/$tag/$archive"
+        curl -fsSL --retry 3 -o "$tmp/checksums.txt" "$repo/releases/download/$tag/terraform-demux_${version}_checksums.txt"
+
+        expected="$(awk -v f="$archive" '$2 == f { print $1 }' "$tmp/checksums.txt")"
+        if [ -z "$expected" ]; then
+          echo "::error::No checksum listed for $archive"
+          exit 1
+        fi
+        if command -v sha256sum >/dev/null 2>&1; then
+          actual="$(sha256sum "$tmp/$archive" | awk '{ print $1 }')"
+        else
+          actual="$(shasum -a 256 "$tmp/$archive" | awk '{ print $1 }')"
+        fi
+        if [ "$expected" != "$actual" ]; then
+          echo "::error::Checksum mismatch for $archive (expected $expected, got $actual)"
+          exit 1
+        fi
+
+        tar -xzf "$tmp/$archive" -C "$dest" "$exe"
+        chmod +x "$dest/$exe"
+
+        if [ "$INSTALL_AS_TERRAFORM" = "true" ]; then
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp "$dest/$exe" "$dest/terraform.exe"
+          else
+            ln -s "$exe" "$dest/terraform"
+          fi
+        fi
+
+        echo "$dest" >> "$GITHUB_PATH"
+        echo "version=$tag" >> "$GITHUB_OUTPUT"

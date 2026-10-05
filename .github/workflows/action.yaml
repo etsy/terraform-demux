@@ -1,0 +1,36 @@
+name: setup action
+
+on:
+  pull_request:
+    paths:
+      - action.yml
+      - .github/workflows/action.yaml
+  push:
+    branches: [main]
+    paths:
+      - action.yml
+      - .github/workflows/action.yaml
+
+jobs:
+  smoke:
+    name: smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Install terraform-demux
+        id: demux
+        uses: ./
+
+      - name: Run against a fixture module
+        shell: bash
+        working-directory: testdata/terraform-post-0.12-exact
+        run: |
+          echo "Installed ${{ steps.demux.outputs.version }}"
+          command -v terraform
+          terraform -version

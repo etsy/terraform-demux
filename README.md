@@ -41,6 +41,33 @@ The formula installs the binary as `terraform-demux` and creates a `terraform` s
 terraform -version
 ```
 
+### GitHub Actions
+
+Use the bundled action to install `terraform-demux` on a runner. It puts `terraform-demux` and a `terraform` symlink on `PATH`, so later steps just call `terraform` and get the version each module's `required_version` asks for.
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+  - uses: etsy/terraform-demux@v2.1.3
+  - run: terraform plan # version is picked from the module's required_version
+```
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `version` | `latest` | terraform-demux release to install, e.g. `v2.1.3`. |
+| `install-as-terraform` | `true` | Also install the binary as `terraform` (a symlink; a copy on Windows). |
+
+| Output | Description |
+| --- | --- |
+| `version` | The terraform-demux version that was installed. |
+
+Notes:
+
+- Runs on Linux, macOS, and Windows runners (`amd64` and `arm64`, except `windows/arm64`).
+- The downloaded archive is verified against the release's `checksums.txt` before it is installed.
+- For reproducible builds, pin the action to a release tag or commit SHA and set `version` explicitly.
+- Set `TF_DEMUX_CACHE_HOME` (and cache that directory) if you want to reuse downloaded Terraform binaries across runs.
+
 ### Manual
 
 1. Grab the binary for your platform from the [latest release](https://github.com/etsy/terraform-demux/releases/latest).
