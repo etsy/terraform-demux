@@ -72,9 +72,9 @@ runs:
           exit 1
         fi
         if command -v sha256sum >/dev/null 2>&1; then
-          actual="$(sha256sum "$tmp/$archive" | awk '{ print $1 }')"
+          actual="$(sha256sum < "$tmp/$archive" | awk '{ print $1 }')"
         else
-          actual="$(shasum -a 256 "$tmp/$archive" | awk '{ print $1 }')"
+          actual="$(shasum -a 256 < "$tmp/$archive" | awk '{ print $1 }')"
         fi
         if [ "$expected" != "$actual" ]; then
           echo "::error::Checksum mismatch for $archive (expected $expected, got $actual)"
