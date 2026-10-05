@@ -82,9 +82,10 @@ runs:
         fi
 
         # GNU tar on Windows treats `D:\...` as a remote host:path without --force-local.
-        tar_opts=()
-        if [ "$RUNNER_OS" = "Windows" ]; then tar_opts+=(--force-local); fi
-        tar "${tar_opts[@]}" -xzf "$tmp/$archive" -C "$dest" "$exe"
+        tar_opts=""
+        if [ "$RUNNER_OS" = "Windows" ]; then tar_opts="--force-local"; fi
+        # shellcheck disable=SC2086
+        tar $tar_opts -xzf "$tmp/$archive" -C "$dest" "$exe"
         chmod +x "$dest/$exe"
 
         if [ "$INSTALL_AS_TERRAFORM" = "true" ]; then
